@@ -1,0 +1,50 @@
+include:
+- project: 'deckhouse/modules/gitlab-ci'
+  ref: main
+  file: '/templates/Setup.gitlab-ci.yml'
+- project: 'deckhouse/modules/gitlab-ci'
+  ref: main
+  file: '/templates/Build.gitlab-ci.yml'
+- project: 'deckhouse/modules/gitlab-ci'
+  ref: main
+  file: '/templates/Deploy.gitlab-ci.yml'
+
+variables:
+  MODULES_REGISTRY: registry.example.com
+  MODULES_REGISTRY_PATH: /deckhouse/modules
+  # Do not forget to put
+  # MODULES_REGISTRY_LOGIN and MODULES_REGISTRY_PASSWORD
+  # to your Gitlab CI secrets
+
+Build:
+  extends: .build
+  tags:
+  - tfprod-distributed-werf
+
+Deploy to Alpha:
+  extends: .deploy
+  variables:
+    RELEASE_CHANNEL: alpha
+  tags:
+    - tfprod-distributed-werf
+
+Deploy to Beta:
+  extends: .deploy
+  variables:
+    RELEASE_CHANNEL: beta
+  tags:
+    - tfprod-distributed-werf
+
+Deploy to EarlyAccess:
+  extends: .deploy
+  variables:
+    RELEASE_CHANNEL: early-access
+  tags:
+    - tfprod-distributed-werf
+
+Deploy to Stable:
+  extends: .deploy
+  variables:
+    RELEASE_CHANNEL: stable
+  tags:
+    - tfprod-distributed-werf

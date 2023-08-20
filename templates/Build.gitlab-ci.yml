@@ -1,0 +1,35 @@
+# variables:
+#   $MODULES_REGISTRY - base URL for the registry, e.g., registry.example.com
+#   $MODULES_REGISTRY_PATH - registry path to the module source, e.g., /deckhouse/modules
+#   $MODULES_MODULE_NAME (Optional) - module name, by default it is equal to the project name
+
+
+.build:
+  stage: build
+  script:
+    - werf build  --report-path images_tags_werf.json
+    # Bundle image
+    - |
+      IMAGE_SRC="$(jq -r '.Images."bundle".DockerImageName' images_tags_werf.json)"
+      REPO="$(jq -r '.Images.bundle.DockerRepo' images_tags_werf.json)"
+      
+      crane tag ${IMAGE_SRC} ${REPO}:${CI_COMMIT_REF_NAME}
+      crane push ${REPO}:${CI_COMMIT_REF_NAME}
+    # Release-channel image
+    - |
+      IMAGE_SRC="$(jq -r '.Images."release-channel-version".DockerImageName' images_tags_werf.json)"
+      REPO="$(jq -r '.Images."release-channel-version".DockerRepo' images_tags_werf.json)"
+      
+      crane tag ${IMAGE_SRC} ${REPO}/release:${CI_COMMIT_REF_NAME}
+      crane push ${REPO}/release:${CI_COMMIT_REF_NAME}
+    # Register module
+    - |
+      crane append \
+        --oci-empty-base \
+        --new_layer "" \
+        --new_tag "${MODULES_REGISTRY}/${MODULES_REGISTRY_PATH}:${MODULES_MODULE_NAME}"
+  only:
+    - tags
+    - branches
+  except:
+    - main
