@@ -10,11 +10,12 @@ include:
   file: '/templates/Deploy.gitlab-ci.yml'
 
 variables:
-  MODULES_REGISTRY: registry.example.com
-  MODULES_REGISTRY_PATH: /deckhouse/modules
   # Do not forget to put
   # MODULES_REGISTRY_LOGIN and MODULES_REGISTRY_PASSWORD
   # to your Gitlab CI secrets
+  MODULES_REGISTRY: registry.example.com
+  MODULES_MODULE_SOURCE: registry.example.com/deckhouse/modules
+
 
 Build:
   extends: .build
