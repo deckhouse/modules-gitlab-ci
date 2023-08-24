@@ -7,23 +7,24 @@
 .build:
   stage: build
   script:
-    - werf build  --report-path images_tags_werf.json
+    - werf build --save-build-report --build-report-path images_tags_werf.json
     # Bundle image
     - |
       IMAGE_SRC="$(jq -r '.Images."bundle".DockerImageName' images_tags_werf.json)"
-      REPO="$(jq -r '.Images.bundle.DockerRepo' images_tags_werf.json)"
+      IMAGE_DST="$(jq -r '.Images.bundle.DockerRepo' images_tags_werf.json):${CI_COMMIT_REF_NAME}"
       
-      crane tag ${IMAGE_SRC} ${REPO}:${CI_COMMIT_REF_NAME}
-      crane push ${REPO}:${CI_COMMIT_REF_NAME}
+      echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+      crane copy ${IMAGE_SRC} ${IMAGE_DST}
     # Release-channel image
     - |
       IMAGE_SRC="$(jq -r '.Images."release-channel-version".DockerImageName' images_tags_werf.json)"
-      REPO="$(jq -r '.Images."release-channel-version".DockerRepo' images_tags_werf.json)"
+      IMAGE_DST="$(jq -r '.Images."release-channel-version".DockerRepo' images_tags_werf.json)/release:${CI_COMMIT_REF_NAME}"
       
-      crane tag ${IMAGE_SRC} ${REPO}/release:${CI_COMMIT_REF_NAME}
-      crane push ${REPO}/release:${CI_COMMIT_REF_NAME}
+      echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+      crane copy ${IMAGE_SRC} ${IMAGE_DST}
     # Register module
     - |
+      echo "✨ Register the module ${MODULES_MODULE_NAME}"
       crane append \
         --oci-empty-base \
         --new_layer "" \
