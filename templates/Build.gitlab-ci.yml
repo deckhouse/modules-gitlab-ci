@@ -9,10 +9,7 @@
     # Register module
     - |
       echo "✨ Register the module ${MODULES_MODULE_NAME}"
-      crane append \
-        --oci-empty-base \
-        --new_layer "" \
-        --new_tag "${MODULES_MODULE_SOURCE}:${MODULES_MODULE_NAME}"
+      crane copy registry.deckhouse.io/base_images/scratch:latest "${MODULES_MODULE_SOURCE}:${MODULES_MODULE_NAME}"
     # Build images
     - |
       werf build \
