@@ -5,11 +5,10 @@ before_script:
   # Setup werf
   - |
     type trdl && . $(trdl use werf 1.2 stable)
-    type werf && source $(werf ci-env gitlab --as-file)
+    type werf
   # Login to the registry
   - |
     crane auth login ${MODULES_REGISTRY} -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD}
-
 stages:
   - build
   - deploy
