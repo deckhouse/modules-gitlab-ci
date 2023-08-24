@@ -6,7 +6,18 @@
 .build:
   stage: build
   script:
-    - werf build --repo=${MODULES_MODULE_SOURCE} --save-build-report --build-report-path images_tags_werf.json
+    # Register module
+    - |
+      echo "✨ Register the module ${MODULES_MODULE_NAME}"
+      crane append \
+        --oci-empty-base \
+        --new_layer "" \
+        --new_tag "${MODULES_MODULE_SOURCE}:${MODULES_MODULE_NAME}"
+    # Build images
+    - |
+      werf build \
+        --repo=${MODULES_MODULE_SOURCE} \
+        --save-build-report --build-report-path images_tags_werf.json
     # Bundle image
     - |
       IMAGE_SRC="$(jq -r '.Images."bundle".DockerImageName' images_tags_werf.json)"
@@ -21,13 +32,7 @@
       
       echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
       crane copy ${IMAGE_SRC} ${IMAGE_DST}
-    # Register module
-    - |
-      echo "✨ Register the module ${MODULES_MODULE_NAME}"
-      crane append \
-        --oci-empty-base \
-        --new_layer "" \
-        --new_tag "${MODULES_MODULE_SOURCE}:${MODULES_MODULE_NAME}"
+
   only:
     - tags
     - branches
