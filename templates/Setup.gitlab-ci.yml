@@ -6,8 +6,9 @@ before_script:
   - |
     type trdl && . $(trdl use werf 1.2 stable)
     type werf && source $(werf ci-env gitlab --as-file)
-    werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
     env
+  # werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
+
 stages:
   - build
   - deploy
