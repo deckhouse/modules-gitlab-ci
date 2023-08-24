@@ -6,7 +6,7 @@
 .build:
   stage: build
   script:
-    - werf build --save-build-report --build-report-path images_tags_werf.json
+    - werf build --repo=${MODULES_MODULE_SOURCE} --save-build-report --build-report-path images_tags_werf.json
     # Bundle image
     - |
       IMAGE_SRC="$(jq -r '.Images."bundle".DockerImageName' images_tags_werf.json)"
