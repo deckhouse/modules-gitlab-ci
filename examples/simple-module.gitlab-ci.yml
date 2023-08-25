@@ -12,7 +12,7 @@ include:
 variables:
   # Do not forget to put
   # MODULES_REGISTRY_LOGIN and MODULES_REGISTRY_PASSWORD
-  # to your Gitlab CI secrets
+  # to your Gitlab CI secrets if needed
   MODULES_REGISTRY: registry.example.com
   MODULES_MODULE_SOURCE: registry.example.com/deckhouse/modules
 

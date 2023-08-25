@@ -6,8 +6,15 @@ before_script:
   - |
     type trdl && . $(trdl use werf 1.2 stable)
     type werf && source $(werf ci-env gitlab --as-file)
-    env
-  # werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
+    
+    # Login to gitlab registry by default
+    if [[ "x${MODULES_REGISTRY_LOGIN}" == "x" ]]; then
+      MODULES_REGISTRY_LOGIN="${CI_REGISTRY_USER}"
+    fi
+    if [[ "x${MODULES_REGISTRY_PASSWORD}" == "x" ]]; then
+      MODULES_REGISTRY_PASSWORD="${CI_REGISTRY_PASSWORD}"
+    fi
+    werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
 
 stages:
   - build
