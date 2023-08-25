@@ -20,7 +20,7 @@ include:
 Build:
   extends: .build
   tags:
-  - tfprod-distributed-werf
+  - my-runner
 ```
 
 > Вместо `ref: main` можно указать конкретный коммит, чтобы изменения не влияли на ваш CI.
