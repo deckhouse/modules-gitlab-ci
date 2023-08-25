@@ -8,11 +8,19 @@
 
 Чтобы подключить шаблон, в `.gitlab-ci.yml` нужно добавить стледующий код:
 
-```
+```yaml
 include:
 - project: 'deckhouse/modules/gitlab-ci'
   ref: main
   file: '/templates/Setup.gitlab-ci.yml'
+- project: 'deckhouse/modules/gitlab-ci'
+  ref: main
+  file: '/templates/Build.gitlab-ci.yml'
+
+Build:
+  extends: .build
+  tags:
+  - tfprod-distributed-werf
 ```
 
 > Вместо `ref: main` можно указать конкретный коммит, чтобы изменения не влияли на ваш CI.
