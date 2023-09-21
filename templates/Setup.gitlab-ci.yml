@@ -1,5 +1,6 @@
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
+  MODULES_MODULE_TAG: ${CI_COMMIT_REF_SLUG}
 
 before_script:
   # Setup werf

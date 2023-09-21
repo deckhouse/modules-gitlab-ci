@@ -2,9 +2,6 @@
 #   $MODULES_MODULE_SOURCE - base URL for the registry, e.g., registry.example.com/deckhouse/modules
 #   $MODULES_MODULE_NAME (Optional) - module name, by default it is equal to the project name
 
-variables:
-  MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
-
 .build:
   stage: build
   script:
