@@ -17,6 +17,4 @@
     crane copy "${IMAGE_SRC}" "${IMAGE_DST}"
   only:
     - tags
-  except:
-    - main
   when: manual
