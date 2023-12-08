@@ -49,3 +49,10 @@ Deploy to Stable:
     RELEASE_CHANNEL: stable
   tags:
     - tfprod-distributed-werf
+
+Deploy to RockSolid:
+  extends: .deploy
+  variables:
+    RELEASE_CHANNEL: rock-solid
+  tags:
+    - tfprod-distributed-werf
