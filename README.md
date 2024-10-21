@@ -1,29 +1,26 @@
 # gitlab-ci
 
-Вспомогательные функции для сборки и доставки модулей Deckhouse при помощи Gitlab CI.
+Helper functions for building and delivering Deckhouse modules using Gitlab CI.
 
-## Основная идея
+## Main Idea
 
-В этом репозитории лежит код для шаблонов заданий Gitlab CI, который можно переиспользовать. Шаблоны лежат в папке [`templates`](templates/).
+This repository contains code for Gitlab CI job templates that can be reused. The templates are located in the [`templates`](templates/) directory.
 
-Чтобы подключить шаблон, в `.gitlab-ci.yml` нужно добавить стледующий код:
+To connect a template, you need to add the following code to your `.gitlab-ci.yml`:
 
 ```yaml
 include:
-- project: 'deckhouse/modules/gitlab-ci'
-  ref: main
-  file: '/templates/Setup.gitlab-ci.yml'
-- project: 'deckhouse/modules/gitlab-ci'
-  ref: main
-  file: '/templates/Build.gitlab-ci.yml'
+- remote: 'https://github.com/deckhouse/modules-gitlab-ci/blob/main/templates/Setup.gitlab-ci.yml'
+- remote: 'https://github.com/deckhouse/modules-gitlab-ci/blob/main/templates/Build.gitlab-ci.yml'
+
+default:
+  tags:
+  - my-runner
 
 Build:
   extends: .build
-  tags:
-  - my-runner
 ```
 
-> Вместо `ref: main` можно указать конкретный коммит, чтобы изменения не влияли на ваш CI.
+> Instead of `/main/`, you can specify a specific commit to ensure changes do not affect your CI. 
 
-
-В папке [`examples`](examples/) лежат примеры `.gitlab-ci.yml`, которые можно собрать из шаблонов.
+The [`examples`](examples/) folder contains examples of `.gitlab-ci.yml` that can be assembled from the templates.
