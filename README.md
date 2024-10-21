@@ -10,8 +10,8 @@ To connect a template, you need to add the following code to your `.gitlab-ci.ym
 
 ```yaml
 include:
-- remote: 'https://github.com/deckhouse/modules-gitlab-ci/blob/main/templates/Setup.gitlab-ci.yml'
-- remote: 'https://github.com/deckhouse/modules-gitlab-ci/blob/main/templates/Build.gitlab-ci.yml'
+- remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/Setup.gitlab-ci.yml'
+- remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/Build.gitlab-ci.yml'
 
 default:
   tags:
