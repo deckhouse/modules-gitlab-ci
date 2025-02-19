@@ -3,11 +3,21 @@ variables:
   MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
 
 before_script:
+  # Setup trdl
+  - |
+    trdl_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
+    type trdl >/dev/null 2>&1 || 
+      { 
+      curl -sSLO "https://tuf.trdl.dev/targets/releases/$trdl_version/linux-amd64/bin/trdl" && 
+      install -D trdl ~/bin/trdl ; 
+      }
+
   # Setup werf
   - |
-    type trdl && . $(trdl use werf 1.2 stable)
-    type werf && source $(werf ci-env gitlab --as-file)
-    
+    trdl add werf https://tuf.werf.io 1 b7ff6bcbe598e072a86d595a3621924c8612c7e6dc6a82e919abe89707d7e3f468e616b5635630680dd1e98fc362ae5051728406700e6274c5ed1ad92bea52a2
+    type trdl >/dev/null 2>&1 && source $(trdl use werf 1.2 stable)
+    type werf >/dev/null 2>&1 && source $(werf ci-env gitlab --as-file)
+
     # Login to gitlab registry by default
     if [[ "x${MODULES_REGISTRY_LOGIN}" == "x" ]]; then
       MODULES_REGISTRY_LOGIN="${CI_REGISTRY_USER}"
