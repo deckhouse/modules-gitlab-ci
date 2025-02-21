@@ -2,17 +2,18 @@
 #   $MODULES_MODULE_SOURCE - base URL for the registry, e.g., registry.example.com/deckhouse/modules
 #   $MODULES_MODULE_NAME (Optional) - module name, by default it is equal to the project name
 
+.lint:
+  stage: build
+  script:
+    - |
+      dmt lint ./
+  only:
+    - branches
+    - tags
+
 .build:
   stage: build
   script:
-    # Lint
-    - |
-      type dmt >/dev/null 2>&1 ||
-        { 
-        trdl add dmt https://trrr.flant.dev/trdl-dmt/ 1 b6c51ab3509296ed9e085461ea35a0da70b2ae02ba8d500400670102cb86b100ae56e133c4c5f8dfe843cc995107fdd5f0037043cd6c149a7ae3c03ec9c44d8c &&
-        source $(trdl use dmt 0 stable) ;
-        }
-      dmt lint ./
     # Build images
     - |
       werf build \

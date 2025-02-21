@@ -15,6 +15,9 @@ default:
   - my-runner-tag
 
 # ---
+Lint:
+  extends: .lint
+
 Build:
   extends: .build
 

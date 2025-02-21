@@ -6,17 +6,14 @@ before_script:
   # Setup trdl
   - |
     trdl_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
-    type trdl >/dev/null 2>&1 || 
-      { 
-      curl -sSLO "https://tuf.trdl.dev/targets/releases/$trdl_version/linux-amd64/bin/trdl" && 
-      install -D trdl ~/bin/trdl ; 
-      }
+    curl -sSLO "https://tuf.trdl.dev/targets/releases/$trdl_version/linux-amd64/bin/trdl"
+    install -D trdl ~/bin/trdl
 
   # Setup werf
   - |
     trdl add werf https://tuf.werf.io 1 b7ff6bcbe598e072a86d595a3621924c8612c7e6dc6a82e919abe89707d7e3f468e616b5635630680dd1e98fc362ae5051728406700e6274c5ed1ad92bea52a2
-    type trdl >/dev/null 2>&1 && source $(trdl use werf 1.2 stable)
-    type werf >/dev/null 2>&1 && source $(werf ci-env gitlab --as-file)
+    source $(trdl use werf 1.2 stable)
+    source $(werf ci-env gitlab --as-file)
 
     # Login to gitlab registry by default
     if [[ "x${MODULES_REGISTRY_LOGIN}" == "x" ]]; then
@@ -26,6 +23,11 @@ before_script:
       MODULES_REGISTRY_PASSWORD="${CI_REGISTRY_PASSWORD}"
     fi
     werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
+
+  # Setup dmt
+  - |
+    trdl add dmt https://trrr.flant.dev/trdl-dmt/ 1 b6c51ab3509296ed9e085461ea35a0da70b2ae02ba8d500400670102cb86b100ae56e133c4c5f8dfe843cc995107fdd5f0037043cd6c149a7ae3c03ec9c44d8c &&
+    source $(trdl use dmt 0 stable)
 
 stages:
   - build
