@@ -2,6 +2,16 @@
 #   $MODULES_MODULE_SOURCE - base URL for the registry, e.g., registry.example.com/deckhouse/modules
 #   $MODULES_MODULE_NAME (Optional) - module name, by default it is equal to the project name
 
+.lint:
+  stage: build
+  script:
+    - |
+      dmt lint ./
+  only:
+    - branches
+    - tags
+  allow_failure: true
+
 .build:
   stage: build
   script:
@@ -14,14 +24,14 @@
     - |
       IMAGE_SRC="$(jq -r '.Images."bundle".DockerImageName' images_tags_werf.json)"
       IMAGE_DST="$(jq -r '.Images.bundle.DockerRepo' images_tags_werf.json):${MODULES_MODULE_TAG}"
-      
+
       echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
       crane copy ${IMAGE_SRC} ${IMAGE_DST}
     # Release-channel image
     - |
       IMAGE_SRC="$(jq -r '.Images."release-channel-version".DockerImageName' images_tags_werf.json)"
       IMAGE_DST="$(jq -r '.Images."release-channel-version".DockerRepo' images_tags_werf.json)/release:${MODULES_MODULE_TAG}"
-      
+
       echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
       crane copy ${IMAGE_SRC} ${IMAGE_DST}
     # Register module
@@ -34,4 +44,3 @@
   only:
     - tags
     - branches
-
