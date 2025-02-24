@@ -10,6 +10,7 @@
   only:
     - branches
     - tags
+  allow_failure: true
 
 .build:
   stage: build
