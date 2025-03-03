@@ -1,3 +1,13 @@
+# variables:
+#   $IMAGE - URL to a registry image, e.g., registry.example.com/deckhouse/modules/module_name
+#   $TAG - module image tag
+#   $MODULE_NAME - module name
+#   $DD_URL - URL to defectDojo
+#   $DD_TOKEN - token of defectDojo to upload reports
+#   $DECKHOUSE_PROD_REGISTRY - must be deckhouse prod registry, used to get trivy databases
+#   $DECKHOUSE_PROD_REGISTRY_USER - username to log in to deckhouse prod registry
+#   $DECKHOUSE_PROD_REGISTRY_PASSWORD - password to log in to deckhouse prod registry
+
 .cve_scan:
   variables:
     TRIVY_BIN_VERSION: v0.55.0
@@ -7,7 +17,6 @@
     TRIVY_POLICY_URL: ${DECKHOUSE_PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1
     SEVERITY: "CRITICAL,HIGH"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
-    DD_URL: https://defectdojo.flant.com
   before_script:
     - echo ${DECKHOUSE_PROD_REGISTRY_PASSWORD} | docker login --username="${DECKHOUSE_PROD_REGISTRY_USER}" --password-stdin ${DECKHOUSE_PROD_REGISTRY}
   script:

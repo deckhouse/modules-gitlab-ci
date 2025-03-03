@@ -1,23 +1,24 @@
 # CVE_Scan CI Integration
 
 ## Description
-This ci file will run Trivy CVE scan against module image and its submodules images and then upload reports to defectDojo.
+This CI file will run a Trivy CVE scan against the module images and its submodule images, and then upload the reports to DefectDojo.
 
 ## Variables
 
 ### Job level
 ```
-IMAGE - full path for module image. e.g.: regestryType.deckhouse.io/path/to/module
+IMAGE - URL to a registry image, e.g., registry.example.com/deckhouse/modules/module_name
 TAG - module image tag
 MODULE_NAME - module name
-DECKHOUSE_PROD_REGISTRY - must be deckhouse read registry, used to get trivy databases
 ```
 
 ### GitLab Masked variables
 ```
+DD_URL - URL to defectDojo
 DD_TOKEN - token of defectDojo to upload reports
-DECKHOUSE_PROD_REGISTRY_USER - username to log in to deckhouse read registry
-DECKHOUSE_PROD_REGISTRY_PASSWORD - password to log in to deckhouse read registry
+DECKHOUSE_PROD_REGISTRY - must be deckhouse prod registry, used to get trivy databases
+DECKHOUSE_PROD_REGISTRY_USER - username to log in to deckhouse prod registry
+DECKHOUSE_PROD_REGISTRY_PASSWORD - password to log in to deckhouse prod registry
 ```
 
 ## How to include
@@ -25,9 +26,7 @@ DECKHOUSE_PROD_REGISTRY_PASSWORD - password to log in to deckhouse read registry
 At the top of your main .gitlab-ci.yml define include section:  
 ```
 include:
-  - project: 'deckhouse/modules/gitlab-ci'
-    ref: main
-    file: 'templates/CVE_Scan.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/CVE_Scan.gitlab-ci.yml'
 ```
 
 Add cve_scan stage in a propper place in stages sequence (usually after build stage):  
@@ -43,10 +42,10 @@ cve_scan:
   stage: cve_scan
   needs: ['build_dev']
   variables:
-    IMAGE: regestryType.deckhouse.io/path/to/module
+    IMAGE: registry.example.com/path/to/module
     TAG: moduleImageTag
     MODULE_NAME: module-name
-    DECKHOUSE_PROD_REGISTRY: registry.deckhouse.io
+    DECKHOUSE_PROD_REGISTRY: registry.example.com
   extends:
     - .cve_scan
 ```
