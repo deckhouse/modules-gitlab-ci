@@ -16,9 +16,9 @@ MODULE_NAME - module name
 ```
 DD_URL - URL to defectDojo
 DD_TOKEN - token of defectDojo to upload reports
-DECKHOUSE_PROD_REGISTRY - must be deckhouse prod registry, used to get trivy databases
-DECKHOUSE_PROD_REGISTRY_USER - username to log in to deckhouse prod registry
-DECKHOUSE_PROD_REGISTRY_PASSWORD - password to log in to deckhouse prod registry
+TRIVY_REGISTRY - must be deckhouse prod registry, used to get trivy databases
+TRIVY_REGISTRY_USER - username to log in to deckhouse prod registry
+TRIVY_REGISTRY_PASSWORD - password to log in to deckhouse prod registry
 ```
 
 ## How to include
@@ -45,7 +45,6 @@ cve_scan:
     IMAGE: registry.example.com/path/to/module
     TAG: moduleImageTag
     MODULE_NAME: module-name
-    DECKHOUSE_PROD_REGISTRY: registry.example.com
   extends:
     - .cve_scan
 ```
