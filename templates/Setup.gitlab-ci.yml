@@ -1,6 +1,7 @@
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
   MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
+  BASE_IMAGES_VERSION: ${BASE_IMAGES_VERSION:-v0.2}
 
 before_script:
   # Setup trdl
@@ -31,7 +32,7 @@ before_script:
 
   # Download base images yaml file
   - |
-    curl https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/v0.1/base_images.yml -o base_images.yml
+    curl https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml -o base_images.yml
 stages:
   - build
   - deploy
