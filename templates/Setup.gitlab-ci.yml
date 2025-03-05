@@ -1,6 +1,7 @@
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
   MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
+  BASE_IMAGES_VERSION: ${BASE_IMAGES_VERSION:-v0.2}
 
 before_script:
   # Setup trdl
@@ -29,6 +30,9 @@ before_script:
     trdl add dmt https://trrr.flant.dev/trdl-dmt/ 1 b6c51ab3509296ed9e085461ea35a0da70b2ae02ba8d500400670102cb86b100ae56e133c4c5f8dfe843cc995107fdd5f0037043cd6c149a7ae3c03ec9c44d8c &&
     source $(trdl use dmt 0 stable)
 
+  # Download base images yaml file
+  - |
+    curl https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml -o base_images.yml
 stages:
   - build
   - deploy
