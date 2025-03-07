@@ -1,6 +1,7 @@
 # variables:
 #   $MODULES_MODULE_SOURCE - base URL for the registry, e.g., registry.example.com/deckhouse/modules
 #   $MODULES_MODULE_NAME (Optional) - module name, by default it is equal to the project name
+#   $WERF_REPO - registry path, default ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
 
 .lint:
   stage: build
@@ -18,7 +19,6 @@
     # Build images
     - |
       werf build \
-        --repo=${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME} \
         --save-build-report --build-report-path images_tags_werf.json
     # Bundle image
     - |
