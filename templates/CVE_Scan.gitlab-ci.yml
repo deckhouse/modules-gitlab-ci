@@ -1,7 +1,7 @@
 # variables:
 #   $IMAGE - URL to a registry image, e.g., registry.example.com/deckhouse/modules/module_name
-#   $TAG - module image tag
-#   $MODULE_NAME - module name
+#   $MODULES_MODULE_TAG - module image tag
+#   $MODULES_MODULE_NAME - module name
 #   $DD_URL - URL to defectDojo
 #   $DD_TOKEN - token of defectDojo to upload reports
 #   $TRIVY_REGISTRY - must be deckhouse prod registry, used to get trivy databases
@@ -17,6 +17,7 @@
     TRIVY_POLICY_URL: ${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-bdu:1
     SEVERITY: "CRITICAL,HIGH"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
+    IMAGE: ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
   before_script:
     - echo ${TRIVY_REGISTRY_PASSWORD} | docker login --username="${TRIVY_REGISTRY_USER}" --password-stdin ${TRIVY_REGISTRY}
   script:
@@ -28,18 +29,18 @@
       ln -s ${PWD}/bin/trivy-${TRIVY_BIN_VERSION}/trivy bin/trivy
     # Run Trivy scan
     - |
-      echo "Image to check: $IMAGE:$TAG"
+      echo "Image to check: $IMAGE:$MODULES_MODULE_TAG"
       echo "Severity: $SEVERITY"
       echo "----------------------------------------------"
       echo ""
       echo "Getting module image"
-      crane export "$IMAGE:$TAG" "${MODULE_NAME}.tar"
-      mkdir "$MODULE_NAME"
+      crane export "$IMAGE:$MODULES_MODULE_TAG" "${MODULE_NAME}.tar"
+      mkdir "$MODULES_MODULE_NAME"
       tar xf "${MODULE_NAME}.tar" -C "${MODULE_NAME}/"
       echo "Preparing images list to scan"
       digests=$(cat "${MODULE_NAME}${IMAGES_DIGESTS_PATH}")
       # Main module images to scan
-      digests=$(echo "$digests"|jq --arg i "$MODULE_NAME" --arg s "$TAG" '. += { ($i): ($s) }')
+      digests=$(echo "$digests"|jq --arg i "$MODULES_MODULE_NAME" --arg s "$MODULES_MODULE_TAG" '. += { ($i): ($s) }')
       echo "Images to scan:"
       echo "$digests"
       mkdir -p out/json
@@ -51,19 +52,19 @@
         fi
         # Set flag if additional image to use tag instead of hash
         additional_image_detected=false
-        if [ "$IMAGE_NAME" == "$MODULE_NAME" ]; then
+        if [ "$IMAGE_NAME" == "$MODULES_MODULE_NAME" ]; then
           additional_image_detected=true
         fi
         echo "----------------------------------------------"
         echo "👾 Image: $IMAGE_NAME"
         echo ""
         IMAGE_HASH="$(jq -rc '.value' <<< "$module_image")"
-        IMAGE_REPORT_NAME="$MODULE_NAME::$IMAGE_NAME"
+        IMAGE_REPORT_NAME="$MODULES_MODULE_NAME::$IMAGE_NAME"
         # Output reports per images
         echo "    Scanning $IMAGE_REPORT_NAME"
 
         if [ "$additional_image_detected" == true ]; then
-          bin/trivy i --policy "$TRIVY_POLICY_URL" --java-db-repository "$TRIVY_JAVA_DB_URL" --db-repository "$TRIVY_DB_URL" --severity=$SEVERITY --ignorefile "out/.trivyignore" --format json --scanners vuln --output "out/json/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" --quiet "$IMAGE:$TAG"
+          bin/trivy i --policy "$TRIVY_POLICY_URL" --java-db-repository "$TRIVY_JAVA_DB_URL" --db-repository "$TRIVY_DB_URL" --severity=$SEVERITY --ignorefile "out/.trivyignore" --format json --scanners vuln --output "out/json/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" --quiet "$IMAGE:$MODULES_MODULE_TAG"
         else
           bin/trivy i --policy "$TRIVY_POLICY_URL" --java-db-repository "$TRIVY_JAVA_DB_URL" --db-repository "$TRIVY_DB_URL" --severity=$SEVERITY --ignorefile "out/.trivyignore" --format json --scanners vuln --output "out/json/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" --quiet "$IMAGE@$IMAGE_HASH"
         fi
@@ -86,7 +87,7 @@
           -F "push_to_jira=false" \
           -F "file=@out/json/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" \
           -F "product_type_name=Deckhouse images" \
-          -F "product_name=$MODULE_NAME" \
+          -F "product_name=$MODULES_MODULE_NAME" \
           -F "scan_date=${date_iso}" \
           -F "engagement_name=CVE Test: ${MODULE_NAME} Images" \
           -F "service=${MODULE_NAME} / ${IMAGE_NAME}" \
