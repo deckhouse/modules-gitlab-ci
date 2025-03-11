@@ -17,9 +17,8 @@
     TRIVY_POLICY_URL: ${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-bdu:1
     SEVERITY: "CRITICAL,HIGH"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
-  before_script:
-    - echo ${TRIVY_REGISTRY_PASSWORD} | docker login --username="${TRIVY_REGISTRY_USER}" --password-stdin ${TRIVY_REGISTRY}
   script:
+    - echo ${TRIVY_REGISTRY_PASSWORD} | docker login --username="${TRIVY_REGISTRY_USER}" --password-stdin ${TRIVY_REGISTRY}
     # Get Trivy
     - |
       mkdir -p bin/trivy-${TRIVY_BIN_VERSION}
