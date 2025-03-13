@@ -15,7 +15,7 @@
     TRIVY_DB_URL: ${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-db:2
     TRIVY_JAVA_DB_URL: ${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-java-db:1
     TRIVY_POLICY_URL: ${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-bdu:1
-    SEVERITY: "CRITICAL,HIGH"
+    SEVERITY: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
   script:
     - echo ${TRIVY_REGISTRY_PASSWORD} | docker login --username="${TRIVY_REGISTRY_USER}" --password-stdin ${TRIVY_REGISTRY}
