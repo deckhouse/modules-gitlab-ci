@@ -1,7 +1,7 @@
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
   MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
-  BASE_IMAGES_VERSION: ${BASE_IMAGES_VERSION:-v0.2}
+  BASE_IMAGES_VERSION: v0.2
   WERF_REPO: ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
 
 before_script:
@@ -10,11 +10,13 @@ before_script:
     trdl_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
     curl -sSLO "https://tuf.trdl.dev/targets/releases/$trdl_version/linux-amd64/bin/trdl"
     install -D trdl ~/bin/trdl
+    rm trdl
+    export PATH=$PATH:~/bin
 
   # Setup werf
   - |
     trdl add werf https://tuf.werf.io 1 b7ff6bcbe598e072a86d595a3621924c8612c7e6dc6a82e919abe89707d7e3f468e616b5635630680dd1e98fc362ae5051728406700e6274c5ed1ad92bea52a2
-    source $(trdl use werf 1.2 stable)
+    source $(trdl use werf ${WERF_VERSION:-1.2 stable})
     source $(werf ci-env gitlab --as-file)
 
     # Login to gitlab registry by default
@@ -28,12 +30,12 @@ before_script:
 
   # Setup dmt
   - |
-    trdl add dmt https://trrr.flant.dev/trdl-dmt/ 1 b6c51ab3509296ed9e085461ea35a0da70b2ae02ba8d500400670102cb86b100ae56e133c4c5f8dfe843cc995107fdd5f0037043cd6c149a7ae3c03ec9c44d8c &&
+    trdl add dmt https://trrr.flant.dev/trdl-dmt/ 0 e77d785600a8c8612b84b93a5a2e4c48188d68f7478356d0708213e928bf67b024ed412e702dc32930da5c5bfc9b1c44be3ee7a292f923327815c91c6c3c3833
     source $(trdl use dmt 0 stable)
 
   # Download base images yaml file
-  - |
-    curl https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml -o base_images.yml
+  - env | grep BASE_IMAGES_VERSION
+  - curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
 stages:
   - build
   - deploy
