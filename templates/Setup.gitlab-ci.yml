@@ -35,7 +35,7 @@ before_script:
 
   # Download base images yaml file
   - |
-    curl https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml -o base_images.yml
+    curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
 stages:
   - build
   - deploy
