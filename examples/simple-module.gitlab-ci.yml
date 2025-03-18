@@ -9,7 +9,7 @@ variables:
   # to your Gitlab CI secrets if needed
   MODULES_REGISTRY: registry.example.com
   MODULES_MODULE_SOURCE: registry.example.com/deckhouse/modules
-  #WERF_VERSION: "2 stable"
+  WERF_VERSION: "2 stable"
 
 default:
   tags:
