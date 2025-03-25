@@ -21,6 +21,12 @@ Build:
   extends: .build
 ```
 
-> Instead of `/main/`, you can specify a specific commit to ensure changes do not affect your CI. 
+> Instead of `/main/`, you can specify a specific commit to ensure changes do not affect your CI.
 
 The [`examples`](examples/) folder contains examples of `.gitlab-ci.yml` that can be assembled from the templates.
+
+## Variables
+
+`$MODULES_MODULE_SOURCE` - base URL for the registry, e.g., `registry.example.com/deckhouse/modules`
+`$MODULES_MODULE_NAME` (Optional) - module name, by default it is equal to the project name
+`$WERF_REPO` - registry path, default `${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}`
