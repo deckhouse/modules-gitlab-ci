@@ -5,8 +5,6 @@
 
 .publish:
   stage: deploy
-  dependencies:
-    - .build
   script:
     - |
       # Login to Gitlab (source) registry if target registry is not same Gitlab
