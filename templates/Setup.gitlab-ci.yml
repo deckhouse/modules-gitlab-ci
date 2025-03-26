@@ -1,3 +1,33 @@
+variables:
+  ##############################
+  # User default settings
+  ##############################
+
+  MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
+  MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
+
+  ##############################
+  # Internal default settings
+  ##############################
+  BASE_IMAGES_VERSION: v0.2
+
+  # use module's container registry (on Gitlab) as werf's intermediate/cache images registry (repo with all build-time artifacts (garbage))
+  WERF_REPO: ${CI_REGISTRY_IMAGE}/${MODULES_MODULE_NAME}
+
+stages:
+  - lint
+  - build
+  - deploy
+
+.default_rules:
+  rules:
+    # run if $FORCE_CI variable is defined
+    - if: '$FORCE_CI'
+    # run if there is a tag defined (module release workflow)
+    - if: '$CI_COMMIT_TAG'
+    # run if there is a push to a branch
+    - if: '$CI_COMMIT_BRANCH'
+
 .setup:
   before_script:
     # Setup trdl

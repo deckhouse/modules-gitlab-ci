@@ -1,5 +1,7 @@
 .lint:
   stage: lint
+  rules:
+    - !reference [.default_rules, rules]
   allow_failure: true
   before_script:
     - !reference [.setup, before_script]

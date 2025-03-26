@@ -1,20 +1,7 @@
-spec:
-  inputs:
-    tag_regex:
-    branch_regex:
-
-# for info about expand_vars see https://docs.gitlab.com/ci/yaml/inputs/#expand_vars
 .build:
   stage: build
   rules:
-    # run if tag match with regex
-    - if: '"$CI_COMMIT_TAG" =~ /^($[[ inputs.tag_regex | expand_vars ]])$/'
-      when: on_success
-    # run if branch name match with regex
-    - if: '"$CI_COMMIT_BRANCH" =~ /^($[[ inputs.branch_regex | expand_vars ]])$/'
-      when: on_success
-    # do not run in other cases
-    - when: never
+    - !reference [.default_rules, rules]
   before_script:
     - !reference [.setup, before_script]
   script:
