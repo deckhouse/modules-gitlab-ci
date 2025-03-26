@@ -27,7 +27,7 @@ stages:
     - if: '$CI_COMMIT_TAG'
     # run if there is a merge request event
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-    # DO NOT run if there is a push to a branch and there are open merge requests
+    # DO NOT run if there is a push to a branch and there are open merge requests (remove duplicated `branch` pipeline)
     - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
       when: never
     # run if there is a push to a branch (without opened merge requests)
