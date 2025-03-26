@@ -1,0 +1,52 @@
+variables:
+  ##############################
+  # User default settings
+  ##############################
+
+  # process only tags with prefix "v" by default
+  TAG_REGEX: "v.*"
+  # process everything branch by default
+  BRANCH_REGEX: ".*"
+
+  MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
+  MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
+
+  ##############################
+  # Internal default settings
+  ##############################
+  BASE_IMAGES_VERSION: v0.2
+
+  # use module's container registry (on Gitlab) as werf's intermediate/cache images registry (repo with all build-time artifacts (garbage))
+  WERF_REPO: ${CI_REGISTRY_IMAGE}/${MODULES_MODULE_NAME}
+
+stages:
+  - lint
+  - build
+  - deploy
+
+workflow:
+  rules:
+    # https://docs.gitlab.com/ee/ci/yaml/index.html#workflow
+    # https://docs.gitlab.com/ee/ci/variables/predefined_variables.html
+    # https://docs.gitlab.com/ee/ci/variables/predefined_variables.html#predefined-variables-for-merge-request-pipelines
+
+    # run if $FORCE_WORKFLOW variable is defined
+    - if: '$FORCE_WORKFLOW'
+    # run if there is a tag defined (module release workflow)
+    - if: '$CI_COMMIT_TAG'
+    # run if there is a push to a branch
+    - if: '$CI_COMMIT_BRANCH'
+
+include:
+  - local: '/templates/Setup.gitlab-ci.yml'
+  - local: '/templates/Lint.gitlab-ci.yml'
+  # This is a workaround for checking to variable matching some regex
+  # More info: https://gitlab.com/gitlab-org/gitlab/-/issues/209904
+  # Also: https://docs.gitlab.com/ci/yaml/inputs/#expand_vars
+  # Only variables you can use with the include keyword and which are not masked can be expanded.
+  - local: '/templates/Build.gitlab-ci.yml'
+    inputs:
+      tag_regex: $TAG_REGEX
+      branch_regex: $BRANCH_REGEX
+
+

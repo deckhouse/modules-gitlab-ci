@@ -1,46 +1,28 @@
-# variables:
-#   $MODULES_MODULE_SOURCE - base URL for the registry, e.g., registry.example.com/deckhouse/modules
-#   $MODULES_MODULE_NAME (Optional) - module name, by default it is equal to the project name
-#   $WERF_REPO - registry path, default ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
+spec:
+  inputs:
+    tag_regex:
+    branch_regex:
 
-.lint:
-  stage: build
-  script:
-    - |
-      dmt lint ./
-  only:
-    - branches
-    - tags
-  allow_failure: true
-
+# for info about expand_vars see https://docs.gitlab.com/ci/yaml/inputs/#expand_vars
 .build:
   stage: build
+  rules:
+    # run if tag match with regex
+    - if: '"$CI_COMMIT_TAG" =~ /^($[[ inputs.tag_regex | expand_vars ]])$/'
+      when: on_success
+    # run if branch name match with regex
+    - if: '"$CI_COMMIT_BRANCH" =~ /^($[[ inputs.branch_regex | expand_vars ]])$/'
+      when: on_success
+    # do not run in other cases
+    - when: never
+  before_script:
+    - !reference [.setup, before_script]
   script:
     # Build images
     - |
       werf build \
         --save-build-report --build-report-path images_tags_werf.json
-    # Bundle image
-    - |
-      IMAGE_SRC="$(jq -r '.Images."bundle".DockerImageName' images_tags_werf.json)"
-      IMAGE_DST="$(jq -r '.Images.bundle.DockerRepo' images_tags_werf.json):${MODULES_MODULE_TAG}"
-
-      echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
-      crane copy ${IMAGE_SRC} ${IMAGE_DST}
-    # Release-channel image
-    - |
-      IMAGE_SRC="$(jq -r '.Images."release-channel-version".DockerImageName' images_tags_werf.json)"
-      IMAGE_DST="$(jq -r '.Images."release-channel-version".DockerRepo' images_tags_werf.json)/release:${MODULES_MODULE_TAG}"
-
-      echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
-      crane copy ${IMAGE_SRC} ${IMAGE_DST}
-    # Register module
-    - |
-      echo "✨ Register the module ${MODULES_MODULE_NAME}"
-      crane append \
-        --oci-empty-base \
-        --new_layer "" \
-        --new_tag "${MODULES_MODULE_SOURCE}:${MODULES_MODULE_NAME}"
-  only:
-    - tags
-    - branches
+  artifacts:
+    paths:
+      - images_tags_werf.json
+    expire_in: "30 days"

@@ -1,13 +1,3 @@
-variables:
-  MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
-  MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
-  BASE_IMAGES_VERSION: v0.2
-
-stages:
-  - lint
-  - build
-  - deploy
-
 .setup:
   before_script:
     # Setup trdl
