@@ -1,8 +1,3 @@
-# variables:
-#   $MODULES_MODULE_SOURCE - base URL for the registry, e.g., registry.example.com/deckhouse/modules
-#   $MODULES_MODULE_NAME (Optional) - module name, by default it is equal to the project name
-#   $RELEASE_CHANNEL - lowercase release channel name, e.g., alpha, stable, early-access
-
 .publish:
   stage: deploy
   script:

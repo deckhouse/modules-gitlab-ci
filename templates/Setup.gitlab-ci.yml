@@ -27,6 +27,8 @@ stages:
     - if: '$CI_COMMIT_TAG'
     # run if there is a push to a branch
     - if: '$CI_COMMIT_BRANCH'
+    # run if there is a merge request event
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
 
 .setup:
   before_script:
