@@ -27,6 +27,7 @@ The [`examples`](examples/) folder contains examples of `.gitlab-ci.yml` that ca
 
 ## Variables
 
-`$MODULES_MODULE_SOURCE` - base URL for the registry, e.g., `registry.example.com/deckhouse/modules`
+`$MODULES_REGISTRY` - base URL for the registry, e.g. `registry.example.com`
+`$MODULES_REGISTRY_PATH` - path to modules repository in registry, e.g. `deckhouse/modules`
 `$MODULES_MODULE_NAME` (Optional) - module name, by default it is equal to the project name
 `$RELEASE_CHANNEL` - lowercase release channel name, e.g., `alpha`, `stable`, `early-access`

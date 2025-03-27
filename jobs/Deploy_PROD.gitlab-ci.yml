@@ -1,0 +1,24 @@
+Deploy to Alpha:
+  extends: .deploy
+  variables:
+    RELEASE_CHANNEL: alpha
+
+Deploy to Beta:
+  extends: .deploy
+  variables:
+    RELEASE_CHANNEL: beta
+
+Deploy to EarlyAccess:
+  extends: .deploy
+  variables:
+    RELEASE_CHANNEL: early-access
+
+Deploy to Stable:
+  extends: .deploy
+  variables:
+    RELEASE_CHANNEL: stable
+
+Deploy to RockSolid:
+  extends: .deploy
+  variables:
+    RELEASE_CHANNEL: rock-solid
