@@ -1,0 +1,15 @@
+.build:
+  stage: build
+  rules:
+    - !reference [.default_rules, rules]
+  before_script:
+    - !reference [.setup, before_script]
+  script:
+    # Build images
+    - |
+      werf build \
+        --save-build-report --build-report-path images_tags_werf.json
+  artifacts:
+    paths:
+      - images_tags_werf.json
+    expire_in: "30 days"
