@@ -1,0 +1,44 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/templates/Setup.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/templates/Lint.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/templates/Build.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/templates/Deploy.gitlab-ci.yml'
+  # deploy jobs for DEV registry
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/jobs/Deploy_DEV.gitlab-ci.yml'
+  # deploy jobs for PROD registry
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/jobs/Deploy_PROD.gitlab-ci.yml'
+
+variables:
+  # Do not forget to put these variables to your Gitlab CI secrets:
+  # They are REQUIRED and used for pulling/pushing images to the corresponding registry
+  # - DEV_MODULES_REGISTRY: DEV registry domain (like: registry.example.com)
+  # - DEV_MODULES_REGISTRY_PATH: path to modules repository in DEV registry (like: deckhouse/modules)
+  # - DEV_MODULES_REGISTRY_LOGIN: username to log in to DEV registry
+  # - DEV_MODULES_REGISTRY_PASSWORD: password to log in to DEV registry
+
+  # WARNING: If some of following variables are NOT SET, then there is NO production deployment jobs will be created in pipeline
+  # - PROD_MODULES_REGISTRY: PROD registry domain (like: registry.example.com)
+  # - PROD_MODULES_REGISTRY_PATH: path to modules repository in PROD registry (like: deckhouse/modules)
+  # - PROD_MODULES_REGISTRY_LOGIN: username to log in to PROD registry
+  # - PROD_MODULES_REGISTRY_PASSWORD: password to log in to PROD registry
+  WERF_VERSION: "2 stable"
+  BASE_IMAGES_VERSION: v0.2
+
+default:
+  tags:
+    - my-runner-tag
+
+
+###### LINT STAGE ######
+
+Lint:
+  extends: .lint
+
+###### END OF LINT STAGE ######
+
+###### BUILD STAGE ######
+
+Build:
+  extends: .build
+
+###### END OF BUILD STAGE ######
