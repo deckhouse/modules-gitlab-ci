@@ -1,6 +1,6 @@
 # emulate same behaviour as in Deckhouse Github registry
 # when opened PRs will pushed to dev registry
-Publish DEV:
+Publish merge request to DEV:
   extends: .publish
   variables:
     MODULES_REGISTRY: ${DEV_MODULES_REGISTRY}
@@ -15,6 +15,24 @@ Publish DEV:
       when: never
     # run only for merge requests
     - if: $CI_MERGE_REQUEST_IID && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME != $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: on_success
+    # do not run in other cases
+    - when: never
+
+Publish default branch to DEV:
+  extends: .publish
+  variables:
+    MODULES_REGISTRY: ${DEV_MODULES_REGISTRY}
+    MODULES_REGISTRY_PATH: ${DEV_MODULES_REGISTRY_PATH}
+    MODULES_REGISTRY_LOGIN: ${DEV_MODULES_REGISTRY_LOGIN}
+    MODULES_REGISTRY_PASSWORD: ${DEV_MODULES_REGISTRY_PASSWORD}
+    MODULES_MODULE_TAG: ${CI_DEFAULT_BRANCH}
+  rules:
+    # do not run if some required variables is empty
+    - if: '$DEV_MODULES_REGISTRY == null || $DEV_MODULES_REGISTRY == "" || $DEV_MODULES_REGISTRY_PATH == null || $DEV_MODULES_REGISTRY_PATH == ""'
+      when: never
+    # run only for default (main/master) branch
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: on_success
     # do not run in other cases
     - when: never
