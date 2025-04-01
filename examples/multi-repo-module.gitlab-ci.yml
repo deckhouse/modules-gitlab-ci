@@ -1,12 +1,12 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/templates/Setup.gitlab-ci.yml'
-  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/templates/Lint.gitlab-ci.yml'
-  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/templates/Build.gitlab-ci.yml'
-  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/templates/Deploy.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Setup.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Lint.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Build.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Deploy.gitlab-ci.yml'
   # deploy jobs for DEV registry
-  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/jobs/Deploy_DEV.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/jobs/multi-repo/Deploy_DEV.gitlab-ci.yml'
   # deploy jobs for PROD registry
-  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/i-makeev/feature-multirepo-workflow/jobs/Deploy_PROD.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/jobs/multi-repo/Deploy_PROD.gitlab-ci.yml'
 
 variables:
   # Do not forget to put these variables to your Gitlab CI secrets:
