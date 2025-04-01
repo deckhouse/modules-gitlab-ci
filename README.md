@@ -34,8 +34,9 @@ In `templates/multi-repo` the CI workflow differs from `basic` CI (which in `tem
 
 ### Detailed differences between `multi-repo` and `basic` workflows
 
-- [General] There is additional stage `lint` before `build`.
+- [General] There is additional stage `lint` before `build` and `cleanup` stage after `deploy`.
 - [General] All `only` sections (like `only: [tags, branches]`) replaced with corresponding `rules` section.
+- [General] Added `Cleanup` job to cleanup Gitlab's registry by pipeline schedule
 - [General] Added `.default_rules` hidden job (see `templates/multi-repo/Setup.gitlab-ci.yml`) for easy modification of this whole workflow.
 - [General] Added `.deploy-prod-rules` hidden job (see `templates/multi-repo/Deploy.gitlab-ci.yml`) for easy modification of `deploy to production` workflow.
 - [General] Added `jobs/multi-repo` jobs files which user can include and use in their own workflow.

@@ -1,0 +1,11 @@
+Cleanup:
+  stage: cleanup
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: on_success
+    - when: never
+  before_script:
+    - !reference [.setup, before_script]
+  script:
+    - werf managed-images ls
+    - werf cleanup

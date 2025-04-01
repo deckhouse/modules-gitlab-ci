@@ -18,6 +18,7 @@ stages:
   - lint
   - build
   - deploy
+  - cleanup
 
 .default_rules:
   rules:
