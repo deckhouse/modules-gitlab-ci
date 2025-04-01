@@ -3,6 +3,7 @@ include:
   - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Lint.gitlab-ci.yml'
   - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Build.gitlab-ci.yml'
   - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Deploy.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Cleanup.gitlab-ci.yml'
   # deploy jobs for DEV registry
   - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/jobs/multi-repo/Deploy_DEV.gitlab-ci.yml'
   # deploy jobs for PROD registry
