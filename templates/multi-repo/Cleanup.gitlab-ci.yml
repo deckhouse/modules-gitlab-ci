@@ -12,6 +12,7 @@ Scheduled cleanup:
 
 Auto cleanup:
   stage: cleanup
+  allow_failure: true
   rules:
     # do not run if this job is explicitly disabled by user
     - if: $AUTO_CLEANUP == "false" || $AUTO_CLEANUP == "0" || $AUTO_CLEANUP == ""
