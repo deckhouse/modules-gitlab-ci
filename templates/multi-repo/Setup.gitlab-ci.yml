@@ -5,6 +5,9 @@ variables:
 
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
   MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
+  # Enable auto-cleanup job by default.
+  # `Auto cleanup` job is run randomly, only if current second is divisible by 10
+  AUTO_CLEANUP: "true"
 
   ##############################
   # Internal default settings
@@ -16,9 +19,9 @@ variables:
 
 stages:
   - lint
+  - cleanup
   - build
   - deploy
-  - cleanup
 
 .default_rules:
   rules:

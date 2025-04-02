@@ -1,4 +1,4 @@
-Cleanup:
+Scheduled cleanup:
   stage: cleanup
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
@@ -9,3 +9,19 @@ Cleanup:
   script:
     - werf managed-images ls
     - werf cleanup
+
+Auto cleanup:
+  stage: cleanup
+  rules:
+    - if: $AUTO_CLEANUP == "true" || $AUTO_CLEANUP == "1"
+      when: on_success
+    - when: never
+  before_script:
+    - !reference [.setup, before_script]
+  script:
+    - |
+      if (( $(date +%s) % 10 == 0 )); then
+        echo "✨ Run auto cleanup"
+        werf managed-images ls
+        werf cleanup
+      fi
