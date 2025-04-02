@@ -13,9 +13,10 @@ Scheduled cleanup:
 Auto cleanup:
   stage: cleanup
   rules:
-    - if: $AUTO_CLEANUP == "true" || $AUTO_CLEANUP == "1"
-      when: on_success
-    - when: never
+    # do not run if this job is explicitly disabled by user
+    - if: $AUTO_CLEANUP == "false" || $AUTO_CLEANUP == "0" || $AUTO_CLEANUP == ""
+      when: never
+    - !reference [.default_rules, rules]
   before_script:
     - !reference [.setup, before_script]
   script:
