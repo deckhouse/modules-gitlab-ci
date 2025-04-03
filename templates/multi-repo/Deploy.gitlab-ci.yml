@@ -63,7 +63,7 @@
     - if: $FORCE_CI
       when: manual
     # do not run if some required variables is empty
-    - if: '$MODULES_REGISTRY == null || $MODULES_REGISTRY == "" || $MODULES_REGISTRY_PATH == null || $MODULES_REGISTRY_PATH == "" || $RELEASE_CHANNEL == null || $RELEASE_CHANNEL == ""'
+    - if: '$PROD_MODULES_REGISTRY == null || $PROD_MODULES_REGISTRY == "" || $EDITION == null || $EDITION == "" || $RELEASE_CHANNEL == null || $RELEASE_CHANNEL == ""'
       when: never
     # add MANUAL deploy job only if it is a tag defined (release workflow)
     - if: '$CI_COMMIT_TAG'
