@@ -9,6 +9,9 @@
     - |
       werf build \
         --save-build-report --build-report-path images_tags_werf.json
+
+      # debug
+      cat images_tags_werf.json
   artifacts:
     paths:
       - images_tags_werf.json
