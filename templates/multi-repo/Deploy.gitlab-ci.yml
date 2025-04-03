@@ -21,7 +21,7 @@
         IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}:${IMAGE_TAG}"
 
         echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
-        # crane copy ${IMAGE_SRC} ${IMAGE_DST}
+        crane copy ${IMAGE_SRC} ${IMAGE_DST}
       done
     # Bundle image
     - |
@@ -36,7 +36,7 @@
       IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}/release:${MODULES_MODULE_TAG}"
 
       echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
-      # crane copy ${IMAGE_SRC} ${IMAGE_DST}
+      crane copy ${IMAGE_SRC} ${IMAGE_DST}
     # Register module
     - |
       echo "✨ Register the module ${MODULES_MODULE_NAME}"
@@ -55,7 +55,7 @@
     IMAGE_DST="${REPO}:${RELEASE_CHANNEL}"
 
     echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
-    # crane copy "${IMAGE_SRC}" "${IMAGE_DST}"
+    crane copy "${IMAGE_SRC}" "${IMAGE_DST}"
 
 .deploy_prod_rules:
   rules:
