@@ -1,24 +1,32 @@
-Deploy to Alpha:
-  extends: .deploy
-  variables:
-    RELEASE_CHANNEL: alpha
+# Deploy to PROD EE:
+#   extends: .deploy_prod
+#   variables:
+#     EDITION: ee
+#   parallel:
+#     matrix:
+#       - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
 
-Deploy to Beta:
-  extends: .deploy
+Deploy to PROD FE:
+  extends: .deploy_prod
   variables:
-    RELEASE_CHANNEL: beta
+    EDITION: fe
+  parallel:
+    matrix:
+      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
 
-Deploy to EarlyAccess:
-  extends: .deploy
+Deploy to PROD SE:
+  extends: .deploy_prod
   variables:
-    RELEASE_CHANNEL: early-access
+    EDITION: se
+  parallel:
+    matrix:
+      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
 
-Deploy to Stable:
-  extends: .deploy
+Deploy to PROD SE+:
+  extends: .deploy_prod
   variables:
-    RELEASE_CHANNEL: stable
+    EDITION: se-plus
+  parallel:
+    matrix:
+      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
 
-Deploy to RockSolid:
-  extends: .deploy
-  variables:
-    RELEASE_CHANNEL: rock-solid
