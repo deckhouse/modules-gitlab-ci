@@ -7,13 +7,17 @@ variables:
   MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
   # Enable auto-cleanup job by default.
   # `Auto cleanup` job is run randomly, only if current second is divisible by 10
-  AUTO_CLEANUP: "true"
+  AUTO_CLEANUP:
+    value: "true"
+    description: "`Auto cleanup` job is run randomly (if enabled), only if current second is divisible by 10"
 
   ##############################
   # Internal default settings
   ##############################
   BASE_IMAGES_VERSION: v0.2
-
+  FORCE_CI:
+    value: "false"
+    description: "Set to true if need force run workflow"
 
   # use module's container registry (on Gitlab) as werf's intermediate/cache images registry (repo with all build-time artifacts (garbage))
   WERF_REPO: ${CI_REGISTRY_IMAGE}/${MODULES_MODULE_NAME}
