@@ -1,10 +1,10 @@
-# Deploy to PROD EE:
-#   extends: .deploy_prod
-#   variables:
-#     EDITION: ee
-#   parallel:
-#     matrix:
-#       - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
+Deploy to PROD EE:
+  extends: .deploy_prod
+  variables:
+    EDITION: ee
+  parallel:
+    matrix:
+      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
 
 Deploy to PROD FE:
   extends: .deploy_prod
