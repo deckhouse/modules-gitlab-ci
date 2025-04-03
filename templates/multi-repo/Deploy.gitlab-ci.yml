@@ -21,7 +21,7 @@
         IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}:${IMAGE_TAG}"
 
         echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
-        crane copy ${IMAGE_SRC} ${IMAGE_DST}
+        # crane copy ${IMAGE_SRC} ${IMAGE_DST}
       done
     # Bundle image
     - |
@@ -29,14 +29,14 @@
       IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}:${MODULES_MODULE_TAG}"
 
       echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
-      crane copy ${IMAGE_SRC} ${IMAGE_DST}
+      # crane copy ${IMAGE_SRC} ${IMAGE_DST}
     # Release-channel image
     - |
       IMAGE_SRC="$(jq -r '.Images."release-channel-version".DockerImageName' images_tags_werf.json)"
       IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}/release:${MODULES_MODULE_TAG}"
 
       echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
-      crane copy ${IMAGE_SRC} ${IMAGE_DST}
+      # crane copy ${IMAGE_SRC} ${IMAGE_DST}
     # Register module
     - |
       echo "✨ Register the module ${MODULES_MODULE_NAME}"
@@ -55,7 +55,7 @@
     IMAGE_DST="${REPO}:${RELEASE_CHANNEL}"
 
     echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
-    crane copy "${IMAGE_SRC}" "${IMAGE_DST}"
+    # crane copy "${IMAGE_SRC}" "${IMAGE_DST}"
 
 .deploy_prod_rules:
   rules:
@@ -70,7 +70,7 @@
       when: manual
 
 .deploy_prod:
-  extends: .deploy
+  stage: deploy
   rules:
     - !reference [.deploy_prod_rules, rules]
   variables:
@@ -79,3 +79,8 @@
     MODULES_REGISTRY_PASSWORD: $PROD_MODULES_REGISTRY_PASSWORD
     # path in PROD registry must be hardcoded
     MODULES_REGISTRY_PATH: deckhouse/${EDITION}/modules
+  script:
+    # publish final images to prod registry and register module with $MODULES_MODULE_TAG
+    - !reference [.publish, script]
+    # make 'symlink' to published module tag for specified release-channel
+    - !reference [.deploy, script]
