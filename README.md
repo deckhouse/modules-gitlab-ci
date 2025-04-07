@@ -41,6 +41,7 @@ In `templates/multi-repo` the CI workflow differs from `basic` CI (which in `tem
 - [General] Added `.default_rules` hidden job (see `templates/multi-repo/Setup.gitlab-ci.yml`) for easy modification of this whole workflow.
 - [General] Added `.deploy-prod-rules` hidden job (see `templates/multi-repo/Deploy.gitlab-ci.yml`) for easy modification of `deploy to production` workflow.
 - [General] Added `jobs/multi-repo` jobs files which user can include and use in their own workflow.
+- [General] Added ability to specify which module's `EDITION` (`CE`, `EE`, etc) should be pushed to PRODUCTION registry.
 - [Refactor] Default `before_script` section (see `templates/Setup.gitlab-ci.yml`) moved to `.setup/before_script` job.
 - [Refactor] `dmt lint` job moved to `lint` stage in dedicated `templates/multi-repo/Lint.gitlab-ci.yml` file.
 - [Refactor] All werf's caches and other artifacts (from `build` stage) are stored in Gitlab's registry (`${CI_REGISTRY_IMAGE}/${MODULES_MODULE_NAME}`) by default.
