@@ -11,6 +11,16 @@ spec:
         - se-plus
 
 ---
+Debug:
+  stage: deploy
+  rules:
+    - when: always
+  script:
+    - printenv | sort
+  parallel:
+    matrix:
+      - EDITION: $[[ inputs.editions ]]
+      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
 
 Deploy to PROD ${EDITION}:
   extends: .deploy_prod
