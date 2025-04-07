@@ -8,6 +8,20 @@ include:
   - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/jobs/multi-repo/Deploy_DEV.gitlab-ci.yml'
   # deploy jobs for PROD registry
   - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/jobs/multi-repo/Deploy_PROD.gitlab-ci.yml'
+    inputs:
+      # Editions used in your module. Array of following items:
+      # ce - Community edition
+      # ee - Enterprise edition
+      # fe - Flant edition (internal edition for Flant's engineers)
+      # se - Standard edition
+      # se-plus - Standard edition +
+      editions:
+        # All values must be in lowercase and quoted
+        - "ce"
+        - "ee"
+        - "fe"
+        - "se"
+        - "se-plus"
 
 variables:
   # Do not forget to put these variables to your Gitlab CI secrets:

@@ -1,32 +1,20 @@
-Deploy to PROD EE:
+# https://docs.gitlab.com/ci/inputs/
+spec:
+  inputs:
+    editions:
+      type: array
+      description: List of module editions
+      default:
+        - ee
+        - fe
+        - se
+        - se-plus
+
+---
+
+Deploy to PROD:
   extends: .deploy_prod
-  variables:
-    EDITION: ee
   parallel:
     matrix:
-      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
-
-Deploy to PROD FE:
-  extends: .deploy_prod
-  variables:
-    EDITION: fe
-  parallel:
-    matrix:
-      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
-
-Deploy to PROD SE:
-  extends: .deploy_prod
-  variables:
-    EDITION: se
-  parallel:
-    matrix:
-      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
-
-Deploy to PROD SE+:
-  extends: .deploy_prod
-  variables:
-    EDITION: se-plus
-  parallel:
-    matrix:
-      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
-
+      - EDITION: $[[ inputs.editions ]]
+        RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
