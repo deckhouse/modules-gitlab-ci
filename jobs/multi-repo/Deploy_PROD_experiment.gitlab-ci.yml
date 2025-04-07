@@ -20,11 +20,11 @@ Debug:
   parallel:
     matrix:
       - EDITION: $[[ inputs.editions ]]
-      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
+        RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
 
 Deploy to PROD ${EDITION}:
   extends: .deploy_prod
   parallel:
     matrix:
       - EDITION: $[[ inputs.editions ]]
-      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
+        RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
