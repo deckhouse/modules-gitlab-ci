@@ -1,0 +1,20 @@
+# https://docs.gitlab.com/ci/inputs/
+spec:
+  inputs:
+    editions:
+      type: array
+      description: List of module editions
+      default:
+        - ee
+        - fe
+        - se
+        - se-plus
+
+---
+
+Deploy to PROD ${EDITION}:
+  extends: .deploy_prod
+  parallel:
+    matrix:
+      - EDITION: $[[ inputs.editions ]]
+      - RELEASE_CHANNEL: [alpha, beta, early-access, stable, rock-solid]
