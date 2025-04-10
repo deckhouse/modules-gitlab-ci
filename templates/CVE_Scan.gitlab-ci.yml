@@ -109,7 +109,7 @@
           -F "build_id=${IMAGE_HASH}" \
           -F "commit_hash=${CI_COMMIT_SHA}" \
           -F "branch_tag=${TAG}" \
-          -F "apply_tags_to_findings=true" \
-#        > /dev/null
+          -F "apply_tags_to_findings=true"
+        #> /dev/null
       done
 
