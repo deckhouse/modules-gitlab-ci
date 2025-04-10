@@ -82,7 +82,7 @@
         echo ""
         echo " Uploading trivy CVE report for image ${IMAGE_NAME} of ${MODULE_NAME} module"
         echo ""
-        curl -s -X POST \
+        curl -X POST \
           ${DD_URL}/api/v2/reimport-scan/ \
           -H "accept: application/json" \
           -H "Content-Type: multipart/form-data"  \
@@ -110,6 +110,6 @@
           -F "commit_hash=${CI_COMMIT_SHA}" \
           -F "branch_tag=${TAG}" \
           -F "apply_tags_to_findings=true" \
-        > /dev/null
+#        > /dev/null
       done
 
