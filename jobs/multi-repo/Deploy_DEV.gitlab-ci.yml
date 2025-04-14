@@ -31,8 +31,8 @@ Publish default branch to DEV:
     # do not run if some required variables is empty
     - if: '$DEV_MODULES_REGISTRY == null || $DEV_MODULES_REGISTRY == "" || $DEV_MODULES_REGISTRY_PATH == null || $DEV_MODULES_REGISTRY_PATH == ""'
       when: never
-    # run only for default (main/master) branch
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # run only when push to default (main/master) branch
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: on_success
     # do not run in other cases
     - when: never
