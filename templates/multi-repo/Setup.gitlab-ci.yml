@@ -40,7 +40,7 @@ stages:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     # run when new branch is created and there are no opened merge requests for this branch and no commits to this branch yet (completely new branch from master/main)
     # this rule is required for job `Publish merge request to DEV` to work properly
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && !$CI_MERGE_REQUEST_IID && $CI_COMMIT_BEFORE_SHA == "0000000000000000000000000000000000000000"
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && ($CI_MERGE_REQUEST_IID == null || $CI_MERGE_REQUEST_IID == "") && $CI_COMMIT_BEFORE_SHA == "0000000000000000000000000000000000000000"
     # DO NOT run if this is a push to a branch and there are open merge requests (remove duplicated `branch` pipeline)
     # - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
     #   when: never
