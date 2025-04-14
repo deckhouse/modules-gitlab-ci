@@ -12,12 +12,12 @@
 
 .cve_scan:
   variables:
-    TRIVY_BIN_VERSION: v0.58.1
+    TRIVY_BIN_VERSION: "v0.58.1"
     TRIVY_CACHE_CLEAN: "true"
     TRIVY_REPO_ID: "2181"
-    TRIVY_DB_URL: ${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-db:2
-    TRIVY_JAVA_DB_URL: ${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-java-db:1
-    TRIVY_POLICY_URL: ${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-bdu:1
+    TRIVY_DB_URL: "${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-db:2"
+    TRIVY_JAVA_DB_URL: "${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
+    TRIVY_POLICY_URL: "${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
     SEVERITY: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
     PROD_REGISTRY_MODULE_BASEDIR: "${TRIVY_REGISTRY}/deckhouse/fe/modules"
