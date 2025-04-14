@@ -16,6 +16,9 @@ Publish merge request to DEV:
     # run only for merge requests
     - if: $CI_MERGE_REQUEST_IID && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME != $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "merge_request_event"
       when: on_success
+    # run when new branch is created and there are no opened merge requests for this branch and no commits to this branch yet (completely new branch from master/main)
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && !$CI_MERGE_REQUEST_IID && $CI_COMMIT_BEFORE_SHA == "0000000000000000000000000000000000000000"
+      when: on_success
     # do not run in other cases
     - when: never
 
