@@ -8,7 +8,7 @@
 #   $TRIVY_REGISTRY_USER - username to log in to deckhouse prod registry
 #   $TRIVY_REGISTRY_PASSWORD - password to log in to deckhouse prod registry
 #   $TRIVY_REPORTS_LOG_OUTPUT - true/false. Output Trivy reports into CI job log, default - true
-#   $SCAN_THREE_LAST_RELEASES - scan 3 last releases by getting 3 last tags from repo
+#   $SCAN_THREE_LAST_RELEASES - true/false. scan 3 last releases by getting 3 last tags from repo, default - false
 
 .cve_scan:
   variables:
@@ -35,7 +35,7 @@
     # Run Trivy scan
     - |
       repo_tags=("${TAG}")
-      if [ "$SCAN_THREE_LAST_RELEASES" == "true" ]; then
+      if [ "${SCAN_THREE_LAST_RELEASES}" == "true" ]; then
         repo_tags+=($(curl -s --request GET --header "PRIVATE-TOKEN: ${CI_PRIVATE_TOKEN}" https://fox.flant.com/api/v4/projects/${CI_PROJECT_ID}/repository/tags | jq -r '.[].name'))
         repo_tags=(${repo_tags[@]:0:4})
       fi
