@@ -40,7 +40,8 @@ stages:
     - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
       when: never
     # run if there is a push to a branch (without opened merge requests)
-    - if: $CI_COMMIT_BRANCH
+    # TODO: check that all pipelines works as expected without this one rule
+    # - if: $CI_COMMIT_BRANCH
 
 .setup:
   before_script:
