@@ -9,8 +9,6 @@
 #   $TRIVY_REGISTRY_PASSWORD - password to log in to deckhouse prod registry
 #   $TRIVY_REPORTS_LOG_OUTPUT - true/false. Output Trivy reports into CI job log, default - true
 #   $SCAN_THREE_LAST_RELEASES - scan 3 last releases by getting 3 last tags from repo
-#   $PROD_REGISTRY_MODULE_BASEDIR - example.registry.com/path/to/modules/basedir 
-(registry.deckhouse.io/deckhouse/fe/modules/csi-hpe)
 
 .cve_scan:
   variables:
