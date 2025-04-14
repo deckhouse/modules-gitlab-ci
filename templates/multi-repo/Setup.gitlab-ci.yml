@@ -30,18 +30,18 @@ stages:
 
 .default_rules:
   rules:
-    # run if $FORCE_CI variable is set
+    # run if $FORCE_CI variable is set to true
     - if: $FORCE_CI == "true" || $FORCE_CI == "1"
     # run if there is a tag defined (module release workflow)
     - if: $CI_COMMIT_TAG
-    # run if there is a merge request event
+    # run if this is a merge request event
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-    # DO NOT run if there is a push to a branch and there are open merge requests (remove duplicated `branch` pipeline)
-    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+    # DO NOT run if this is a push to a branch and there are open merge requests (remove duplicated `branch` pipeline)
+    # - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+    #   when: never
+    # DO NOT run if this is a push (commits) to a branch (regardless of opened merge requests)
+    - if: $CI_COMMIT_BRANCH
       when: never
-    # run if there is a push to a branch (without opened merge requests)
-    # TODO: check that all pipelines works as expected without this one rule
-    # - if: $CI_COMMIT_BRANCH
 
 .setup:
   before_script:
