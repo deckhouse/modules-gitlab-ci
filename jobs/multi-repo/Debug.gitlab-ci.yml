@@ -8,6 +8,6 @@ debug:printenv:
   rules:
     # run if $DEBUG_CI variable is set to true
     - if: $DEBUG_CI == "true" || $DEBUG_CI == "1"
-  before_script:
+  script:
     - |
       printenv | sort
