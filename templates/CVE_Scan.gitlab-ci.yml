@@ -37,7 +37,7 @@
       repo_tags=("${TAG}")
       echo "Getting tags to scan"
       if [ "${SCAN_THREE_LAST_RELEASES}" == "true" ]; then
-        repo_tags+=("$(curl -s --request GET --header "JOB-TOKEN: ${CI_JOB_TOKEN}" https://fox.flant.com/api/v4/projects/${CI_PROJECT_ID}/repository/tags | jq -r '.[].name')")
+        repo_tags+=($(curl -s --request GET --header "JOB-TOKEN: ${CI_JOB_TOKEN}" ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/tags | jq -r '.[].name'))
         repo_tags=(${repo_tags[@]:0:4})
       fi
       echo "CVE Scan will be applied to the following tags of ${MODULE_NAME}"
