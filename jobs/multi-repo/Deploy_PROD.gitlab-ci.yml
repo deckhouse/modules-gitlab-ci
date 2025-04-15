@@ -11,9 +11,22 @@ spec:
         - se-plus
 
 ---
+Create gitlab release:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG && $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$/
+  script:
+    - echo "running release job"
+  # See https://docs.gitlab.com/ee/ci/yaml/#release for available properties
+  release:
+    tag_name: '$CI_COMMIT_TAG'
+    description: '$CI_COMMIT_TAG'
 
 Deploy to PROD:
   extends: .deploy_prod
+  needs:
+    - Create gitlab release
   parallel:
     matrix:
       - EDITION: $[[ inputs.editions ]]
