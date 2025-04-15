@@ -60,12 +60,13 @@
         done
       fi
       echo "CVE Scan will be applied to the following tags of ${MODULE_NAME}"
+      echo "${module_tags[@]}"
       # Scan in loop for provided list of tags
       for module_tag in ${module_tags[@]}; do
         # If we are scanning release images - we need to redefine image path to prod registry
         if [ "${module_tag}" != "${TAG}" ]; then
           module_image="${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
-        elif [ "${module_tag}" == "${CI_DEFAULT_BRANCH}" ] && [ "${CI_PIPELINE_SOURCE}" != "merge_request_event" ]; then
+        elif [[ "${module_tag}" == "${CI_DEFAULT_BRANCH}" ] && [ "${CI_PIPELINE_SOURCE}" != "merge_request_event" ]]; then
           module_image="${DEV_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
         else
           module_image="${IMAGE}"
