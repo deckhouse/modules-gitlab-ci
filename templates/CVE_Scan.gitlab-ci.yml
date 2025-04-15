@@ -34,7 +34,12 @@
       fi
     # Run Trivy scan
     - |
-      repo_tags=("${TAG}")
+      # Do not use input var TAG if not merge request
+      if[ "${CI_PIPELINE_SOURCE}" == "merge_request_event" ]; then
+        repo_tags=("${TAG}")
+      else
+        repo_tags=()
+      fi
       echo "Getting tags to scan"
       if [ "${SCAN_THREE_LAST_RELEASES}" == "true" ]; then
         repo_tags+=($(curl -s --header "JOB-TOKEN: ${CI_JOB_TOKEN}" ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases | jq -r '.[].tag_name'))
