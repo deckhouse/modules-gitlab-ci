@@ -14,8 +14,6 @@ spec:
 
 Deploy to PROD:
   extends: .deploy_prod
-  needs:
-    - Create gitlab release
   parallel:
     matrix:
       - EDITION: $[[ inputs.editions ]]
