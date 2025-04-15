@@ -21,6 +21,7 @@
     SEVERITY: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
     PROD_REGISTRY_MODULE_BASEDIR: "${TRIVY_REGISTRY}/deckhouse/fe/modules"
+    DEV_REGISTRY_MODULE_BASEDIR: "dev-registry.deckhouse.io/sys/deckhouse-oss/modules"
   script:
     - echo ${TRIVY_REGISTRY_PASSWORD} | docker login --username="${TRIVY_REGISTRY_USER}" --password-stdin ${TRIVY_REGISTRY}
     # Get Trivy
