@@ -10,6 +10,16 @@
 #   $TRIVY_REPORTS_LOG_OUTPUT - true/false. Output Trivy reports into CI job log, default - true
 #   $SCAN_THREE_LAST_RELEASES - true/false. scan 3 last releases by getting 3 last tags from repo, default - false
 
+
+#Vars to delete
+#TRIVY_REGISTRY
+#TRIVY_REGISTRY_USER
+#TRIVY_REGISTRY_PASSWORD
+#
+#vars to add
+#PROD_REGISTRY_MODULE_BASEDIR
+#DEV_REGISTRY_MODULE_BASEDIR
+
 .cve_scan:
   variables:
     TRIVY_BIN_VERSION: "v0.58.1"
@@ -55,6 +65,8 @@
         # If we are scanning release images - we need to redefine image path to prod registry
         if [ "${module_tag}" != "${TAG}" ]; then
           module_image="${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
+        elif [ "${module_tag}" == "${CI_DEFAULT_BRANCH}" ] && [ "${CI_PIPELINE_SOURCE}" != "merge_request_event" ]; then
+          module_image="${DEV_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
         else
           module_image="${IMAGE}"
         fi
