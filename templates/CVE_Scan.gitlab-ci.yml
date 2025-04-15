@@ -35,7 +35,7 @@
     # Run Trivy scan
     - |
       # Do not use input var TAG if not merge request
-      if[ "${CI_PIPELINE_SOURCE}" == "merge_request_event" ]; then
+      if [ "${CI_PIPELINE_SOURCE}" == "merge_request_event" ]; then
         repo_tags=("${TAG}")
       else
         repo_tags=()
