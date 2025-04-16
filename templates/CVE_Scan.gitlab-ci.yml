@@ -20,6 +20,7 @@
 #PROD_REGISTRY_MODULE_BASEDIR
 #DEV_REGISTRY_MODULE_BASEDIR
 
+#UNKNOWN,LOW,MEDIUM,
 .cve_scan:
   variables:
     TRIVY_BIN_VERSION: "v0.58.1"
@@ -28,7 +29,7 @@
     TRIVY_DB_URL: "${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-db:2"
     TRIVY_JAVA_DB_URL: "${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
     TRIVY_POLICY_URL: "${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
-    SEVERITY: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+    SEVERITY: "HIGH,CRITICAL"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
     PROD_REGISTRY_MODULE_BASEDIR: "${TRIVY_REGISTRY}/deckhouse/fe/modules"
     DEV_REGISTRY_MODULE_BASEDIR: "dev-registry.deckhouse.io/sys/deckhouse-oss/modules"
@@ -128,7 +129,6 @@
           curl -X POST \
             --retry 3 \
             --retry-delay 5 \
-            --max-time 600 \
             ${DD_URL}/api/v2/reimport-scan/ \
             -H "accept: application/json" \
             -H "Content-Type: multipart/form-data"  \
