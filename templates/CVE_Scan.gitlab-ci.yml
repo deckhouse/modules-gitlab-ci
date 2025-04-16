@@ -64,12 +64,13 @@
       # Scan in loop for provided list of tags
       for module_tag in ${module_tags[@]}; do
         # If we are scanning release images - we need to redefine image path to prod registry
-        if [ "${module_tag}" != "${TAG}" ]; then
-          module_image="${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
+        if [ "${module_tag}" == "${TAG}" ]; then
+          module_image="${IMAGE}"
+        # if branch is main and pipeline was triggereg by schedule or manually - use dev registry
         elif [[ "${module_tag}" == "${CI_DEFAULT_BRANCH}" ]] && [[ "${CI_PIPELINE_SOURCE}" != "merge_request_event" ]]; then
           module_image="${DEV_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
         else
-          module_image="${IMAGE}"
+          module_image="${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
         fi
         echo "Image to check: ${module_image}:${module_tag}"
         echo "Severity: ${SEVERITY}"
