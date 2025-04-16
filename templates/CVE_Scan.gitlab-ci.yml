@@ -37,7 +37,7 @@
     # Get Trivy
     - |
       mkdir -p bin/trivy-${TRIVY_BIN_VERSION}
-      curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" ${CI_API_V4_URL}/projects/${TRIVY_REPO_ID}/packages/generic/trivy-${TRIVY_BIN_VERSION}/${TRIVY_BIN_VERSION}/trivy -o bin/trivy-${TRIVY_BIN_VERSION}/trivy
+      curl -s --fail-with-body --header "JOB-TOKEN: ${CI_JOB_TOKEN}" ${CI_API_V4_URL}/projects/${TRIVY_REPO_ID}/packages/generic/trivy-${TRIVY_BIN_VERSION}/${TRIVY_BIN_VERSION}/trivy -o bin/trivy-${TRIVY_BIN_VERSION}/trivy
       chmod u+x bin/trivy-${TRIVY_BIN_VERSION}/trivy
       ln -s ${PWD}/bin/trivy-${TRIVY_BIN_VERSION}/trivy bin/trivy
       if [[ "${TRIVY_CACHE_CLEAN}" == "true" ]]; then
@@ -125,7 +125,7 @@
           echo ""
           echo " Uploading trivy CVE report for image ${IMAGE_NAME} of ${MODULE_NAME} module"
           echo ""
-          curl -X POST \
+          curl -s --fail-with-body -X POST \
             ${DD_URL}/api/v2/reimport-scan/ \
             -H "accept: application/json" \
             -H "Content-Type: multipart/form-data"  \
