@@ -92,7 +92,7 @@
         echo "${digests}"
         touch ${module_workdir}/.trivyignore
         date_iso=$(date -I)
-        for line in $(jq -rc 'to_entries[]' <<< "${digests}"); do
+        while read -r line; do
           IMAGE_NAME=$(jq -rc '.key' <<< "${line}")
           if [[ "${IMAGE_NAME}" == "trivy" ]]; then
             continue
@@ -154,7 +154,7 @@
             -F "branch_tag=${module_tag}" \
             -F "apply_tags_to_findings=true" \
           > /dev/null
-        done
+        done < <(jq -rc 'to_entries[]' <<< "${digests}")
       done
       rm -r ${workdir}
 
