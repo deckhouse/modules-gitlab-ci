@@ -55,7 +55,7 @@
       if [ "${SCAN_THREE_LAST_RELEASES}" == "true" ]; then
         # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get 3 latest
         latest_minor_releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "v[0-9]*\." | sort -V -r | cut -d "-" -f 1|cut -d "." -f -2 | uniq| head -n 3))
-        for r in ${latest_minor_releases[@]}; do
+        for r in ${latest_minor_releases[*]}; do
           module_tags+=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "${r}" | sort -V -r|head -n 1))
         done
       fi
