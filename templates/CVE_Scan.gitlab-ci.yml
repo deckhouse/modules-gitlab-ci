@@ -17,28 +17,34 @@
 #TRIVY_REGISTRY_PASSWORD
 #
 #vars to add
-#PROD_REGISTRY_MODULE_BASEDIR
-#DEV_REGISTRY_MODULE_BASEDIR
+#PROD_REGISTRY
+#PROD_REGISTRY_PASSWORD
+#PROD_REGISTRY_USER
+#DEV_REGISTRY
+#DEV_REGISTRY_PASSWORD
+#DEV_REGISTRY_USER
 
-#UNKNOWN,LOW,MEDIUM,
 .cve_scan:
   variables:
     TRIVY_BIN_VERSION: "v0.58.1"
     TRIVY_CACHE_CLEAN: "true"
     TRIVY_REPO_ID: "2181"
-    TRIVY_DB_URL: "${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-db:2"
-    TRIVY_JAVA_DB_URL: "${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
-    TRIVY_POLICY_URL: "${TRIVY_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
-    SEVERITY: "HIGH,CRITICAL"
+    TRIVY_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-db:2"
+    TRIVY_JAVA_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
+    TRIVY_POLICY_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
+    SEVERITY: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
-    PROD_REGISTRY_MODULE_BASEDIR: "${TRIVY_REGISTRY}/deckhouse/fe/modules"
-    DEV_REGISTRY_MODULE_BASEDIR: "dev-registry.deckhouse.io/sys/deckhouse-oss/modules"
+    PROD_REGISTRY_MODULE_BASEDIR: "${PROD_REGISTRY}/deckhouse/fe/modules"
+    DEV_REGISTRY_MODULE_BASEDIR: "${DEV_REGISTRY}/sys/deckhouse-oss/modules"
   script:
-    - echo ${TRIVY_REGISTRY_PASSWORD} | docker login --username="${TRIVY_REGISTRY_USER}" --password-stdin ${TRIVY_REGISTRY}
+    # Login to registries
+    - |
+      echo ${PROD_REGISTRY_PASSWORD} | docker login --username="${PROD_REGISTRY_USER}" --password-stdin ${PROD_REGISTRY}
+      echo ${DEV_REGISTRY_PASSWORD} | docker login --username="${DEV_REGISTRY_USER}" --password-stdin ${DEV_REGISTRY}
     # Get Trivy
     - |
       mkdir -p bin/trivy-${TRIVY_BIN_VERSION}
-      curl -s --fail-with-body --header "JOB-TOKEN: ${CI_JOB_TOKEN}" ${CI_API_V4_URL}/projects/${TRIVY_REPO_ID}/packages/generic/trivy-${TRIVY_BIN_VERSION}/${TRIVY_BIN_VERSION}/trivy -o bin/trivy-${TRIVY_BIN_VERSION}/trivy
+      curl -s --fail-with-body ${CI_API_V4_URL}/projects/${TRIVY_REPO_ID}/packages/generic/trivy-${TRIVY_BIN_VERSION}/${TRIVY_BIN_VERSION}/trivy -o bin/trivy-${TRIVY_BIN_VERSION}/trivy
       chmod u+x bin/trivy-${TRIVY_BIN_VERSION}/trivy
       ln -s ${PWD}/bin/trivy-${TRIVY_BIN_VERSION}/trivy bin/trivy
       if [[ "${TRIVY_CACHE_CLEAN}" == "true" ]]; then
