@@ -24,6 +24,8 @@
 #DEV_REGISTRY_PASSWORD
 #DEV_REGISTRY_USER
 
+#UNKNOWN,LOW,MEDIUM,
+
 .cve_scan:
   variables:
     TRIVY_BIN_VERSION: "v0.58.1"
@@ -32,7 +34,7 @@
     TRIVY_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-db:2"
     TRIVY_JAVA_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
     TRIVY_POLICY_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
-    SEVERITY: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+    SEVERITY: "HIGH,CRITICAL"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
     PROD_REGISTRY_MODULE_BASEDIR: "${PROD_REGISTRY}/deckhouse/fe/modules"
     DEV_REGISTRY_MODULE_BASEDIR: "${DEV_REGISTRY}/sys/deckhouse-oss/modules"
