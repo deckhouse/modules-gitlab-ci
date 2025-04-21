@@ -13,29 +13,42 @@
     # generate MODULES_MODULE_SOURCE
     - |
       export MODULES_MODULE_SOURCE="${MODULES_REGISTRY}/${MODULES_REGISTRY_PATH}"
+
     # Module images
     - |
-      for image in $(ls images); do
-        IMAGE_SRC="$(jq -r ".Images.\"$image\".DockerImageName" images_tags_werf.json)"
-        IMAGE_TAG="$(jq -r ".Images.\"$image\".DockerTag" images_tags_werf.json)"
-        IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}:${IMAGE_TAG}"
+      jq -r '.Images | values[] | select (.Final==true) | .WerfImageName + " " + .DockerImageName + " " + .DockerTag + " " + .DockerImageDigest' < images_tags_werf.json | while read line; do
+        image="$(cut -d " " -f 1 <<< ${line})"
+        docker_image="$(cut -d " " -f 2 <<< ${line})"
+        docker_tag="$(cut -d " " -f 3 <<< ${line})"
+        shasum="$(cut -d " " -f 4 <<< ${line})"
+        name="$(tr '[:lower:]' '[:upper:]' <<< ${image} | sed 's|[-/]|_|g')"
+
+        # image: pg-images-17.3-bookworm-standard;
+        # name: PG_IMAGES_17.3_BOOKWORM_STANDARD;
+        # shasum: sha256:cd6daa30c94ec77b352156cbf1c05c8e98b44d1d3a47fa2b0a1083587247f730;
+        # docker_image: registry.flant.com/team/managed-services/managed-psql/managed-psql-d8/managed-postgres:ed0388a743d61926309d1023e02c639c1006f7b7b56d78161f32b0e0-1744971955188;
+        # docker_tag: ed0388a743d61926309d1023e02c639c1006f7b7b56d78161f32b0e0-1744971955188
+
+        IMAGE_SRC="${docker_image}"
+        IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}:${docker_tag}"
 
         echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
         crane copy ${IMAGE_SRC} ${IMAGE_DST}
       done
+
     # Bundle image
     - |
       IMAGE_SRC="$(jq -r '.Images."bundle".DockerImageName' images_tags_werf.json)"
       IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}:${MODULES_MODULE_TAG}"
 
-      echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+      echo "✨ Pushing BUNDLE ${IMAGE_SRC} to ${IMAGE_DST}"
       crane copy ${IMAGE_SRC} ${IMAGE_DST}
     # Release-channel image
     - |
       IMAGE_SRC="$(jq -r '.Images."release-channel-version".DockerImageName' images_tags_werf.json)"
       IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}/release:${MODULES_MODULE_TAG}"
 
-      echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+      echo "✨ Pushing RELEASE ${IMAGE_SRC} to ${IMAGE_DST}"
       crane copy ${IMAGE_SRC} ${IMAGE_DST}
     # Register module
     - |
