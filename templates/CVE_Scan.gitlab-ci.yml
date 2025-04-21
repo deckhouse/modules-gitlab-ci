@@ -13,7 +13,6 @@
 #   $TRIVY_REPORTS_LOG_OUTPUT - true/false. Output Trivy reports into CI job log, default - true
 #   $SCAN_THREE_LAST_RELEASES - true/false. scan 3 last releases by getting 3 last tags from repo, default - false
 
-#UNKNOWN,LOW,MEDIUM,
 
 .cve_scan:
   variables:
@@ -23,7 +22,7 @@
     TRIVY_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-db:2"
     TRIVY_JAVA_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
     TRIVY_POLICY_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
-    SEVERITY: "HIGH,CRITICAL"
+    SEVERITY: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
     PROD_REGISTRY_MODULE_BASEDIR: "${PROD_REGISTRY}/deckhouse/fe/modules"
     DEV_REGISTRY_MODULE_BASEDIR: "${DEV_REGISTRY}/sys/deckhouse-oss/modules"
@@ -156,4 +155,3 @@
         done < <(jq -rc 'to_entries[]' <<< "${digests}")
       done
       rm -r ${workdir}
-
