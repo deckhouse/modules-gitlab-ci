@@ -13,7 +13,7 @@
 #   $TRIVY_REPORTS_LOG_OUTPUT - true/false. Output Trivy reports into CI job log, default - true
 #   $SCAN_THREE_LAST_RELEASES - true/false. scan 3 last releases by getting 3 last tags from repo, default - false
 
-
+#UNKNOWN,LOW,MEDIUM,
 .cve_scan:
   variables:
     TRIVY_BIN_VERSION: "v0.58.1"
@@ -22,7 +22,7 @@
     TRIVY_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-db:2"
     TRIVY_JAVA_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
     TRIVY_POLICY_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
-    SEVERITY: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+    SEVERITY: "HIGH,CRITICAL"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
     PROD_REGISTRY_MODULE_BASEDIR: "${PROD_REGISTRY}/deckhouse/fe/modules"
     DEV_REGISTRY_MODULE_BASEDIR: "${DEV_REGISTRY}/sys/deckhouse-oss/modules"
@@ -109,14 +109,14 @@
 
           if [ "${additional_image_detected}" == true ]; then
             if [ "${TRIVY_REPORTS_LOG_OUTPUT}" != "false" ]; then
-              bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${SEVERITY} --ignorefile "${module_workdir}/.trivyignore" --format table --scanners vuln --quiet "${module_image}:${module_tag}"
+              bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${SEVERITY} --ignorefile "${module_workdir}/.trivyignore" --format table --scanners vuln --quiet "${IMAGE_NAME}:${module_tag}"
             fi
-            bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity $SEVERITY --ignorefile "${module_workdir}/.trivyignore" --format json --scanners vuln --output "${module_reports}/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" --quiet "${module_image}:${module_tag}"
+            bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity $SEVERITY --ignorefile "${module_workdir}/.trivyignore" --format json --scanners vuln --output "${module_reports}/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" --quiet "${IMAGE_NAME}:${module_tag}"
           else
             if [ "${TRIVY_REPORTS_LOG_OUTPUT}" != "false" ]; then
-              bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${SEVERITY} --ignorefile "${module_workdir}/.trivyignore" --format table --scanners vuln --quiet "${module_image}@${IMAGE_HASH}"
+              bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${SEVERITY} --ignorefile "${module_workdir}/.trivyignore" --format table --scanners vuln --quiet "${IMAGE_NAME}@${IMAGE_HASH}"
             fi
-            bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${SEVERITY} --ignorefile "${module_workdir}/.trivyignore" --format json --scanners vuln --output "${module_reports}/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" --quiet "$module_image@$IMAGE_HASH"
+            bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${SEVERITY} --ignorefile "${module_workdir}/.trivyignore" --format json --scanners vuln --output "${module_reports}/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" --quiet "${IMAGE_NAME}@${IMAGE_HASH}"
           fi
           echo "    Done"
           echo ""
