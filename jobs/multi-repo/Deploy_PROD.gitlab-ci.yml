@@ -20,7 +20,7 @@ PROD | Deploy to Alpha:
     matrix:
       - EDITION: $[[ inputs.editions ]]
 
-PROD | Deploy to Beta:
+PROD | Beta:
   extends: .deploy_prod
   variables:
     RELEASE_CHANNEL: beta
@@ -28,7 +28,7 @@ PROD | Deploy to Beta:
     matrix:
       - EDITION: $[[ inputs.editions ]]
 
-PROD | Deploy to EarlyAccess:
+PROD | EarlyAccess:
   extends: .deploy_prod
   variables:
     RELEASE_CHANNEL: early-access
@@ -36,7 +36,7 @@ PROD | Deploy to EarlyAccess:
     matrix:
       - EDITION: $[[ inputs.editions ]]
 
-PROD | Deploy to Stable:
+PROD | Stable:
   extends: .deploy_prod
   variables:
     RELEASE_CHANNEL: stable
@@ -45,7 +45,7 @@ PROD | Deploy to Stable:
       - EDITION: $[[ inputs.editions ]]
 
 # because uppercased letters are ordered before lowercased, so put rock-solid job last as in stability level, not alphabetical
-PROD | Deploy to rock-solid:
+PROD | rock-solid:
   extends: .deploy_prod
   variables:
     RELEASE_CHANNEL: rock-solid
