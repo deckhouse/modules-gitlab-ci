@@ -12,7 +12,7 @@ spec:
 
 ---
 
-PROD | Deploy to Alpha:
+PROD | Alpha:
   extends: .deploy_prod
   variables:
     RELEASE_CHANNEL: alpha
