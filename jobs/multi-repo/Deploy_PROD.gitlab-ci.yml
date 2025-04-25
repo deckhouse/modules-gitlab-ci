@@ -12,7 +12,7 @@ spec:
 
 ---
 
-Deploy to PROD | Alpha:
+PROD | Deploy to Alpha:
   extends: .deploy_prod
   variables:
     RELEASE_CHANNEL: alpha
@@ -20,7 +20,7 @@ Deploy to PROD | Alpha:
     matrix:
       - EDITION: $[[ inputs.editions ]]
 
-Deploy to PROD | Beta:
+PROD | Deploy to Beta:
   extends: .deploy_prod
   variables:
     RELEASE_CHANNEL: beta
@@ -28,7 +28,7 @@ Deploy to PROD | Beta:
     matrix:
       - EDITION: $[[ inputs.editions ]]
 
-Deploy to PROD | EarlyAccess:
+PROD | Deploy to EarlyAccess:
   extends: .deploy_prod
   variables:
     RELEASE_CHANNEL: early-access
@@ -36,7 +36,7 @@ Deploy to PROD | EarlyAccess:
     matrix:
       - EDITION: $[[ inputs.editions ]]
 
-Deploy to PROD | Stable:
+PROD | Deploy TO Stable:
   extends: .deploy_prod
   variables:
     RELEASE_CHANNEL: stable
@@ -44,7 +44,7 @@ Deploy to PROD | Stable:
     matrix:
       - EDITION: $[[ inputs.editions ]]
 
-Deploy to PROD | RockSolid:
+PROD | Deploy to RockSolid:
   extends: .deploy_prod
   variables:
     RELEASE_CHANNEL: rock-solid

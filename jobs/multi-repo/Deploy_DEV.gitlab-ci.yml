@@ -1,6 +1,6 @@
 # emulate same behaviour as in Deckhouse Github registry
 # when opened PRs will pushed to dev registry
-Publish merge request to DEV:
+DEV | Publish merge request:
   extends: .publish
   variables:
     MODULES_REGISTRY: ${DEV_MODULES_REGISTRY}
@@ -22,7 +22,7 @@ Publish merge request to DEV:
     # do not run in other cases
     - when: never
 
-Publish default branch to DEV:
+DEV | Publish default branch:
   extends: .publish
   variables:
     MODULES_REGISTRY: ${DEV_MODULES_REGISTRY}
