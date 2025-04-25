@@ -93,6 +93,10 @@
     # path in PROD registry must be hardcoded
     MODULES_REGISTRY_PATH: deckhouse/${EDITION}/modules
   script:
+    - |
+      if [ "$DEBUG_CI" = "true" -o "$DEBUG_CI" = "1" ]; then
+        printenv | sort
+      fi
     # publish final images to prod registry and register module with $MODULES_MODULE_TAG
     - !reference [.publish, script]
     # make 'symlink' to published module tag for specified release-channel
