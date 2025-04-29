@@ -42,6 +42,7 @@
       fi
     # Run Trivy scan
     - |
+      set -e
       # Do not use input var TAG if not merge request
       if [ "${CI_PIPELINE_SOURCE}" == "merge_request_event" ]; then
         module_tags=("${TAG}")
@@ -57,7 +58,7 @@
           module_tags+=($(printf '%s\n' "${releases[@]}" | grep "${r}" | sort -V -r|head -n 1))
         done
       fi
-      echo "CVE Scan will be applied to the following tags of ${MODULE_NAME}"
+      echo "CVE Scan will be applied to the following tags of ${MODULE_NAME}" module:
       echo "${module_tags[@]}"
       # Scan in loop for provided list of tags
       for module_tag in ${module_tags[@]}; do
@@ -99,6 +100,7 @@
           if [ "${IMAGE_NAME}" == "${MODULE_NAME}" ]; then
             additional_image_detected=true
           fi
+          echo ""
           echo "----------------------------------------------"
           echo "👾 Image: ${IMAGE_NAME}"
           echo ""
