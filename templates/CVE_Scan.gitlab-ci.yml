@@ -51,7 +51,7 @@
       echo "Getting tags to scan"
       if [ "${SCAN_THREE_LAST_RELEASES}" == "true" ]; then
         # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get 3 latest
-        latest_minor_releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "v[0-9]*\." | sort -V -r | cut -d "-" -f 1|cut -d "." -f -2 | uniq| head -n 3))
+        latest_minor_releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "v[0-9]*\." | sort -V -r | cut -d "." -f -2 | uniq| head -n 3))
         for r in ${latest_minor_releases[*]}; do
           module_tags+=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "${r}" | sort -V -r|head -n 1))
         done
@@ -60,19 +60,18 @@
       echo "${module_tags[*]}"
       # Scan in loop for provided list of tags
       for module_tag in ${module_tags[*]}; do
+        dd_release_tag=""
+        dd_full_release_tag=""
+        module_image="${DEV_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
         # If we are scanning release images - we need to redefine image path to prod registry
-        if [ "${module_tag}" == "${TAG}" ]; then
-          module_image="${IMAGE}"
-        # if branch is main and pipeline was triggereg by schedule or manually - use dev registry
-        elif [[ "${module_tag}" == "${CI_DEFAULT_BRANCH}" ]] && [[ "${CI_PIPELINE_SOURCE}" != "merge_request_event" ]]; then
-          module_image="${DEV_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
-        else
+        if [[ echo "${module_tag}" | grep -s "^v[0-9]*\.[0-9]*\.[0-9]*" ]] && [[ "${CI_PIPELINE_SOURCE}" != "merge_request_event" ]]; then
           module_image="${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
+          dd_release_tag="release:$(echo ${module_tag} | cut -d '.' -f -2 | sed 's/^v//')"
+          dd_full_release_tag="release_tag:${module_tag}"
         fi
         workdir="trivy_scan"
         module_workdir="${workdir}/${MODULE_NAME}_${module_tag}"
-        module_reports="${workdir}/${MODULE_NAME}_${module_tag}/reports"
-        mkdir -p "${module_workdir}"
+        module_reports="${module_workdir}/reports"
         mkdir -p "${module_reports}"
         echo "Image to check: ${module_image}:${module_tag}"
         echo "Severity: ${SEVERITY}"
@@ -145,7 +144,7 @@
             -F "service=${MODULE_NAME} / ${IMAGE_NAME}" \
             -F "group_by=component_name+component_version" \
             -F "deduplication_on_engagement=false" \
-            -F "tags=deckhouse_image,module:${MODULE_NAME},image:${IMAGE_NAME},branch:${module_tag}" \
+            -F "tags=deckhouse_image,module:${MODULE_NAME},image:${IMAGE_NAME},branch:${module_tag},${dd_short_release_tag},${dd_full_release_tag}" \
             -F "test_title=[${MODULE_NAME}]: ${IMAGE_NAME}:${module_tag}" \
             -F "version=${module_tag}" \
             -F "build_id=${IMAGE_HASH}" \
