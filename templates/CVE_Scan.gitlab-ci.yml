@@ -51,16 +51,17 @@
       echo "Getting tags to scan"
       if [ "${SCAN_THREE_LAST_RELEASES}" == "true" ]; then
         # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get 3 latest
-        latest_minor_releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\." | sort -V -r | cut -d "." -f -2 | uniq | head -n 3))
-        echo "Found minor releases: ${latest_minor_releases[@]}"
+        releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r))
+        latest_minor_releases=($(printf '%s\n' "${releases[@]}"| cut -d "." -f -2 | uniq | head -n 3))
         for r in "${latest_minor_releases[@]}"; do
-          module_tags+=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "${r}" | sort -V -r | head -n 1))
+          module_tags+=($(printf '%s\n' "${releases[@]}" | grep "${r}" | sort -V -r|head -n 1))
         done
+        echo "Found minor releases: ${latest_minor_releases[@]}"
       fi
       echo "CVE Scan will be applied to the following tags of ${MODULE_NAME}"
       echo "${module_tags[@]}"
       # Scan in loop for provided list of tags
-      for module_tag in ${module_tags[*]}; do
+      for module_tag in ${module_tags[@]}; do
         dd_release_tag=""
         dd_full_release_tag=""
         module_image="${DEV_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
