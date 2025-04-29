@@ -51,8 +51,10 @@
       echo "Getting tags to scan"
       if [ "${SCAN_THREE_LAST_RELEASES}" == "true" ]; then
         # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get 3 latest
+        crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
+        crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*"
         crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r
-        printf '%s\n' crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r
+        printf '%s\n' $(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r)
         releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r))
         echo "release: ${releases[@]}"
         latest_minor_releases=($(printf '%s\n' "${releases[@]}"| cut -d "." -f -2 | uniq | head -n 3))
