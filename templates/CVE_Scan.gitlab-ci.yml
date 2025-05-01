@@ -127,7 +127,7 @@
           echo ""
           echo " Uploading trivy CVE report for image ${IMAGE_NAME} of ${MODULE_NAME} module"
           echo ""
-          curl -s -f -i -X POST \
+          curl -f -X POST \
             --retry 5 \
             --retry-delay 10 \
             --retry-all-errors \
