@@ -52,7 +52,7 @@
       fi
       echo "Getting tags to scan"
       # Check if provided tag is a semver minor, and if so - get image from prod registry
-      if echo "${TAG}" | grep -s "[0-9]*\.[0-9]*"; then
+      if echo "${TAG}" | grep -q "[0-9]*\.[0-9]*"; then
         module_tags=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v${TAG}\.[0-9]*" | sort -V -r | head -n 1))
       fi
       if [ "${SCAN_SEVERAL_LASTEST_RELEASES}" == "true" ]; then
@@ -72,7 +72,7 @@
         dd_image_version="${module_tag}"
         module_image="${DEV_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
         # If we are scanning release images - we need to redefine image path to prod registry
-        if echo "${module_tag}" | grep -s "^v[0-9]*\.[0-9]*\.[0-9]*" && [[ "${CI_PIPELINE_SOURCE}" != "merge_request_event" ]]; then
+        if echo "${module_tag}" | grep -q "^v[0-9]*\.[0-9]*\.[0-9]*" && [[ "${CI_PIPELINE_SOURCE}" != "merge_request_event" ]]; then
           module_image="${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
           dd_short_release_tag="release:$(echo ${module_tag} | cut -d '.' -f -2 | sed 's/^v//')"
           dd_full_release_tag="image_release_tag:${module_tag}"
@@ -109,12 +109,9 @@
           fi
           echo ""
           echo "----------------------------------------------"
-          echo "👾 Image: ${IMAGE_NAME}"
+          echo "👾 Scaning image \"${IMAGE_NAME}\" of module \"${MODULE_NAME}\" for tag \"${module_tag}\""
           echo ""
           IMAGE_HASH="$(jq -rc '.value' <<< "${line}")"
-          IMAGE_REPORT_NAME="${MODULE_NAME}::${IMAGE_NAME}"
-          # Output reports per images
-          echo "    Scanning ${IMAGE_REPORT_NAME}"
 
           if [ "${additional_image_detected}" == true ]; then
             if [ "${TRIVY_REPORTS_LOG_OUTPUT}" != "false" ]; then
@@ -132,8 +129,9 @@
           echo " Uploading trivy CVE report for image ${IMAGE_NAME} of ${MODULE_NAME} module"
           echo ""
           curl -X POST \
-            --retry 3 \
-            --retry-delay 5 \
+            --retry 5 \
+            --retry-delay 10 \
+            --retry-all-errors \
             ${DD_URL}/api/v2/reimport-scan/ \
             -H "accept: application/json" \
             -H "Content-Type: multipart/form-data"  \
