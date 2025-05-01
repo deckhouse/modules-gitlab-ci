@@ -42,7 +42,6 @@
       fi
     # Run Trivy scan
     - |
-      set -e
       severity="${SEVERITY:-UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL}"
       # Do not use input var TAG if not merge request
       if [ "${CI_PIPELINE_SOURCE}" == "merge_request_event" ] || [ "${CI_PIPELINE_SOURCE}" == "web" ]; then
