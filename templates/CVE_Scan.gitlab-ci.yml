@@ -11,9 +11,10 @@
 #   DEV_REGISTRY_USER - password to log in to deckhouse dev registry
 #   DEV_REGISTRY_PASSWORD - password to log in to deckhouse dev registry
 #   $TRIVY_REPORTS_LOG_OUTPUT - true/false. Output Trivy reports into CI job log, default - true
-#   $SCAN_THREE_LAST_RELEASES - true/false. scan 3 last releases by getting 3 last tags from repo, default - false
+#   $SCAN_SEVERAL_LASTEST_RELEASES - true/false. scan 3 last releases by getting 3 last tags from repo, default - false
+#   $LATEST_RELEASES_AMOUNT
+#   $SEVERITY
 
-#UNKNOWN,LOW,MEDIUM,
 .cve_scan:
   variables:
     TRIVY_BIN_VERSION: "v0.58.1"
@@ -22,7 +23,6 @@
     TRIVY_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-db:2"
     TRIVY_JAVA_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
     TRIVY_POLICY_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
-    SEVERITY: "HIGH,CRITICAL"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
     PROD_REGISTRY_MODULE_BASEDIR: "${PROD_REGISTRY}/deckhouse/fe/modules"
     DEV_REGISTRY_MODULE_BASEDIR: "${DEV_REGISTRY}/sys/deckhouse-oss/modules"
@@ -43,17 +43,22 @@
     # Run Trivy scan
     - |
       set -e
+      severity="${SEVERITY:-UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL}"
       # Do not use input var TAG if not merge request
-      if [ "${CI_PIPELINE_SOURCE}" == "merge_request_event" ]; then
+      if [ "${CI_PIPELINE_SOURCE}" == "merge_request_event" ] || [ "${CI_PIPELINE_SOURCE}" == "web" ]; then
         module_tags=("${TAG}")
       else
         module_tags=("${CI_DEFAULT_BRANCH}")
       fi
       echo "Getting tags to scan"
-      if [ "${SCAN_THREE_LAST_RELEASES}" == "true" ]; then
-        # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get 3 latest
+      # Check if provided tag is a semver minor, and if so - get image from prod registry
+      if echo "${TAG}" | grep -s "[0-9]*\.[0-9]*"; then
+        module_tags=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v${TAG}\.[0-9]*" | sort -V -r | head -n 1))
+      fi
+      if [ "${SCAN_SEVERAL_LASTEST_RELEASES}" == "true" ]; then
+        # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get several latest
         releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r))
-        latest_minor_releases=($(printf '%s\n' "${releases[@]}"| cut -d "." -f -2 | uniq | head -n 3))
+        latest_minor_releases=($(printf '%s\n' "${releases[@]}"| cut -d "." -f -2 | uniq | head -n ${LATEST_RELEASES_AMOUNT}))
         for r in "${latest_minor_releases[@]}"; do
           module_tags+=($(printf '%s\n' "${releases[@]}" | grep "${r}" | sort -V -r|head -n 1))
         done
@@ -78,7 +83,7 @@
         module_reports="${module_workdir}/reports"
         mkdir -p "${module_reports}"
         echo "Image to check: ${module_image}:${module_tag}"
-        echo "Severity: ${SEVERITY}"
+        echo "Severity: ${severity}"
         echo "----------------------------------------------"
         echo ""
         echo "Getting module image"
@@ -113,14 +118,14 @@
 
           if [ "${additional_image_detected}" == true ]; then
             if [ "${TRIVY_REPORTS_LOG_OUTPUT}" != "false" ]; then
-              bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${SEVERITY} --ignorefile "${module_workdir}/.trivyignore" --format table --scanners vuln --quiet "${module_image}:${module_tag}"
+              bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${severity} --ignorefile "${module_workdir}/.trivyignore" --format table --scanners vuln --quiet "${module_image}:${module_tag}"
             fi
-            bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity $SEVERITY --ignorefile "${module_workdir}/.trivyignore" --format json --scanners vuln --output "${module_reports}/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" --quiet "${module_image}:${module_tag}"
+            bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity $severity --ignorefile "${module_workdir}/.trivyignore" --format json --scanners vuln --output "${module_reports}/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" --quiet "${module_image}:${module_tag}"
           else
             if [ "${TRIVY_REPORTS_LOG_OUTPUT}" != "false" ]; then
-              bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${SEVERITY} --ignorefile "${module_workdir}/.trivyignore" --format table --scanners vuln --quiet "${module_image}@${IMAGE_HASH}"
+              bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${severity} --ignorefile "${module_workdir}/.trivyignore" --format table --scanners vuln --quiet "${module_image}@${IMAGE_HASH}"
             fi
-            bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${SEVERITY} --ignorefile "${module_workdir}/.trivyignore" --format json --scanners vuln --output "${module_reports}/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" --quiet "${module_image}@${IMAGE_HASH}"
+            bin/trivy i --policy "${TRIVY_POLICY_URL}" --java-db-repository "${TRIVY_JAVA_DB_URL}" --db-repository "${TRIVY_DB_URL}" --exit-code 0 --severity ${severity} --ignorefile "${module_workdir}/.trivyignore" --format json --scanners vuln --output "${module_reports}/d8_${MODULE_NAME}_${IMAGE_NAME}_report.json" --quiet "${module_image}@${IMAGE_HASH}"
           fi
           echo "    Done"
           echo ""
