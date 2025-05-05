@@ -44,7 +44,7 @@
     - |
       severity="${SEVERITY:-UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL}"
       # Do not use input var TAG if not merge request
-      if [ "${CI_PIPELINE_SOURCE}" == "merge_request_event" ] || [ "${CI_PIPELINE_SOURCE}" == "web" ]; then
+      if [ "${CI_PIPELINE_SOURCE}" == "merge_request_event" ]; then
         module_tags=("${TAG}")
       else
         module_tags=("${CI_DEFAULT_BRANCH}")
