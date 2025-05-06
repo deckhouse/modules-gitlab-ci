@@ -33,6 +33,8 @@
       echo ${DEV_REGISTRY_PASSWORD} | docker login --username="${DEV_REGISTRY_USER}" --password-stdin ${DEV_REGISTRY}
     # Get Trivy
     - |
+      echo "Get Trivy"
+      echo "Trivy version: ${TRIVY_BIN_VERSION}"
       mkdir -p bin/trivy-${TRIVY_BIN_VERSION}
       curl -s --fail-with-body ${CI_API_V4_URL}/projects/${TRIVY_REPO_ID}/packages/generic/trivy-${TRIVY_BIN_VERSION}/${TRIVY_BIN_VERSION}/trivy -o bin/trivy-${TRIVY_BIN_VERSION}/trivy
       chmod u+x bin/trivy-${TRIVY_BIN_VERSION}/trivy
