@@ -4,16 +4,16 @@
 #   $MODULE_NAME - module name
 #   $DD_URL - URL to defectDojo
 #   $DD_TOKEN - token of defectDojo to upload reports
-#   PROD_REGISTRY - must be deckhouse prod registry, used to get trivy databases and release images
-#   PROD_REGISTRY_USER - password to log in to deckhouse prod registry
-#   PROD_REGISTRY_PASSWORD - username to log in to deckhouse prod registry
-#   DEV_REGISTRY - must be deckhouse dev registry, used to get dev images
-#   DEV_REGISTRY_USER - password to log in to deckhouse dev registry
-#   DEV_REGISTRY_PASSWORD - password to log in to deckhouse dev registry
+#   $PROD_REGISTRY - must be deckhouse prod read registry, used to get trivy databases and release images
+#   $PROD_REGISTRY_USER - username to log in to deckhouse prod read registry
+#   $PROD_REGISTRY_PASSWORD - password to log in to deckhouse prod read registry
+#   $DEV_REGISTRY - must be deckhouse dev registry, used to get dev images
+#   $DEV_REGISTRY_USER - username to log in to deckhouse dev registry
+#   $DEV_REGISTRY_PASSWORD - password to log in to deckhouse dev registry
 #   $TRIVY_REPORTS_LOG_OUTPUT - true/false. Output Trivy reports into CI job log, default - true
-#   $SCAN_SEVERAL_LASTEST_RELEASES - true/false. scan 3 last releases by getting 3 last tags from repo, default - false
-#   $LATEST_RELEASES_AMOUNT
-#   $SEVERITY
+#   $SCAN_SEVERAL_LASTEST_RELEASES - true/false. Whether to scan last several releases or not. For scheduled pipelines override will not work as value is always true.
+#   $LATEST_RELEASES_AMOUNT - Number of latest releases to scan. Default is: 3
+#   $SEVERITY - Vulnerabilities severity to scan. Default is: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
 
 .cve_scan:
   variables:
@@ -45,11 +45,15 @@
     # Run Trivy scan
     - |
       severity="${SEVERITY:-UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL}"
+      latest_releases_amount="${LATEST_RELEASES_AMOUNT:-3}"
       # Do not use input var TAG if not merge request
       if [ "${CI_PIPELINE_SOURCE}" == "merge_request_event" ]; then
         module_tags=("${TAG}")
       else
         module_tags=("${CI_DEFAULT_BRANCH}")
+      fi
+      if [ "${CI_PIPELINE_SOURCE}" == "schedule" ]; then
+        SCAN_SEVERAL_LASTEST_RELEASES="true"
       fi
       echo "Getting tags to scan"
       # Check if provided tag is a semver minor, and if so - get image from prod registry
@@ -59,7 +63,7 @@
       if [ "${SCAN_SEVERAL_LASTEST_RELEASES}" == "true" ]; then
         # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get several latest
         releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r))
-        latest_minor_releases=($(printf '%s\n' "${releases[@]}"| cut -d "." -f -2 | uniq | head -n ${LATEST_RELEASES_AMOUNT}))
+        latest_minor_releases=($(printf '%s\n' "${releases[@]}"| cut -d "." -f -2 | uniq | head -n ${latest_releases_amount}))
         for r in "${latest_minor_releases[@]}"; do
           module_tags+=($(printf '%s\n' "${releases[@]}" | grep "${r}" | sort -V -r|head -n 1))
         done
