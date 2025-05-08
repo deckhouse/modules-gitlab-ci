@@ -87,6 +87,7 @@
         module_workdir="${workdir}/${MODULE_NAME}_${module_tag}"
         module_reports="${module_workdir}/reports"
         mkdir -p "${module_reports}"
+        touch ${module_workdir}/.trivyignore
         echo "Image to check: ${module_image}:${module_tag}"
         echo "Severity: ${severity}"
         echo "----------------------------------------------"
@@ -100,7 +101,6 @@
         digests=$(echo "${digests}"|jq --arg i "${MODULE_NAME}" --arg s "${module_tag}" '. += { ($i): ($s) }')
         echo "Images to scan:"
         echo "${digests}"
-        touch ${module_workdir}/.trivyignore
         date_iso=$(date -I)
         while read -r line; do
           IMAGE_NAME=$(jq -rc '.key' <<< "${line}")
