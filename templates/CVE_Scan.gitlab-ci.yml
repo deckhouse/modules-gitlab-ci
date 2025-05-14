@@ -1,5 +1,4 @@
 # variables:
-#   $IMAGE - URL to a registry image, e.g., registry.example.com/deckhouse/modules/module_name
 #   $TAG - module image tag
 #   $MODULE_NAME - module name
 #   $DD_URL - URL to defectDojo
