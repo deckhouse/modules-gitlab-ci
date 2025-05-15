@@ -81,6 +81,10 @@ stages:
       trdl add dmt https://trrr.flant.dev/trdl-dmt/ 0 e77d785600a8c8612b84b93a5a2e4c48188d68f7478356d0708213e928bf67b024ed412e702dc32930da5c5bfc9b1c44be3ee7a292f923327815c91c6c3c3833
       source $(trdl use dmt 0 stable)
 
-    # Download base images yaml file
-    - env | grep BASE_IMAGES_VERSION
-    - curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
+    - |
+      if [[ ! -z "${BASE_IMAGES_VERSION}" ]]; then
+        echo "Downloading base_images.yml ${BASE_IMAGES_VERSION}"
+        curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
+      else
+        echo "DO NOT download base_images.yml because BASE_IMAGES_VERSION is empty"
+      fi
