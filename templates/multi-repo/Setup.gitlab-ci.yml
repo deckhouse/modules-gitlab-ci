@@ -14,7 +14,7 @@ variables:
   ##############################
   # Internal default settings
   ##############################
-  BASE_IMAGES_VERSION: v0.2
+  BASE_IMAGES_VERSION: v0.5.2
   FORCE_CI:
     value: "false"
     description: "Set to true if need force run workflow"
