@@ -28,6 +28,12 @@ CVE_SCAN_SEVERAL_LASTEST_RELEASES - true/false. Whether to scan last several rel
 ```
 TAG - module image tag
 MODULE_NAME - module name
+PROD_REGISTRY - must be deckhouse prod read registry, used to get trivy databases and release images
+PROD_REGISTRY_USER - username to log in to deckhouse prod read registry
+PROD_REGISTRY_PASSWORD - password to log in to deckhouse prod read registry
+DEV_REGISTRY - must be deckhouse dev registry, used to get dev images
+DEV_REGISTRY_USER - username to log in to deckhouse dev registry
+DEV_REGISTRY_PASSWORD - password to log in to deckhouse dev registry
 ```
 
 #### Optional
