@@ -14,23 +14,6 @@ CI Use cases:
 
 ## Variables
 
-#   $TAG - module image tag
-#   $MODULE_NAME - module name
-#   $DD_URL - URL to defectDojo
-#   $DD_TOKEN - token of defectDojo to upload reports
-#   $PROD_REGISTRY - must be deckhouse prod read registry, used to get trivy databases and release images
-#   $PROD_REGISTRY_USER - username to log in to deckhouse prod read registry
-#   $PROD_REGISTRY_PASSWORD - password to log in to deckhouse prod read registry
-#   $DEV_REGISTRY - must be deckhouse dev registry, used to get dev images
-#   $DEV_REGISTRY_USER - username to log in to deckhouse dev registry
-#   $DEV_REGISTRY_PASSWORD - password to log in to deckhouse dev registry
-#   $TRIVY_REPORTS_LOG_OUTPUT - true/false. Output Trivy reports into CI job log, default - true
-#   $SCAN_SEVERAL_LASTEST_RELEASES - true/false. Whether to scan last several releases or not. For scheduled pipelines override will not work as value is always true.
-#   $LATEST_RELEASES_AMOUNT - Number of latest releases to scan. Default is: 3
-#   $SEVERITY - Vulnerabilities severity to scan. Default is: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-#   $MODULE_PROD_REGISTRY_CUSTOM_PATH - Module custom path in prod registry. Example: flant/modules
-#   $MODULE_DEV_REGISTRY_CUSTOM_PATH - Module custom path in dev registry. Example: flant/modules
-
 ### Pipeline variables section
 ```
 CVE_RELEASE_TO_SCAN - Set minor version of release you want to scan. e.g.: 1.23
