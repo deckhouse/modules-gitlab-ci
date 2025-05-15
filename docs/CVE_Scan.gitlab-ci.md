@@ -11,6 +11,7 @@ CI Use cases:
 - Manual scan
   - Scan specified release by entering semver minor version of target release in *release_branch* variable.
   - Scan main branch and several latest releases by setting *SCAN_SEVERAL_LASTEST_RELEASES* to "true" and optionally defining amount of latest minor releases by setting a number into *LATEST_RELEASES_AMOUNT* variable.
+  - Scan only main branch just by running pipeline
 
 ## Variables
 
