@@ -97,6 +97,8 @@ cve_scan:
     - |
       echo "Executing CVE Scan"
   variables:
+    DD_URL: ${DD_URL}
+    DD_TOKEN: ${DD_TOKEN}
     TAG: $MODULES_MODULE_TAG
     MODULE_NAME: $MODULES_MODULE_NAME
     DEV_REGISTRY: ${DEV_REGISTRY}
