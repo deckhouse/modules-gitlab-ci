@@ -64,7 +64,7 @@ DEV_REGISTRY_PASSWORD - password to log in to deckhouse dev registry
 At the top of your main .gitlab-ci.yml define include section:  
 ```
 include:
-  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/CVE_Scan.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/v2.0/templates/CVE_Scan.gitlab-ci.yml'
 ```
 
 Add global variables with ability to redefine by manual execution in GitLab web UI:

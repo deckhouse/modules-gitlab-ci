@@ -66,12 +66,16 @@
       DEV_REGISTRY_MODULE_BASEDIR="${DEV_REGISTRY}/${MODULE_DEV_REGISTRY_CUSTOM_PATH:-sys/deckhouse-oss/modules}"
       severity="${SEVERITY:-UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL}"
       latest_releases_amount="${LATEST_RELEASES_AMOUNT:-3}"
-      # Do not use input var TAG if not merge request
-      if [ "${CI_PIPELINE_SOURCE}" == "merge_request_event" ]; then
-        module_tags=("${TAG}")
-      else
-        module_tags=("${CI_DEFAULT_BRANCH}")
+      # If input var TAG is empty - set to default branch
+      if [ -z "${TAG}" ]; then
+        TAG="${CI_DEFAULT_BRANCH}"
       fi
+      # prepare TAG if it was triggered with CI_COMMIT_TAG
+      if [ -n "${CI_COMMIT_TAG}" ]; then
+        TAG=$(echo "${TAG}"| sed 's/^v//' | cut -d '.' -f -2)
+      fi
+      module_tags=("${TAG}")
+
       if [ "${CI_PIPELINE_SOURCE}" == "schedule" ]; then
         SCAN_SEVERAL_LASTEST_RELEASES="true"
       fi
