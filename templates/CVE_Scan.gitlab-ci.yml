@@ -103,7 +103,7 @@
         module_image="${DEV_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
         trivy_registry_user="${DEV_REGISTRY_USER}"
         trivy_registry_pass="${DEV_REGISTRY_PASSWORD}"
-        if [ "${module_tag}" == "${CI_DEFAULT_BRANCH}" ];
+        if [ "${module_tag}" == "${CI_DEFAULT_BRANCH}" ]; then
           dd_default_branch_tag="default_branch"
         fi
         # If we are scanning release images - we need to redefine image path to prod registry
