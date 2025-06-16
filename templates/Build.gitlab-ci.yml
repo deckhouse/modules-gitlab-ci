@@ -64,12 +64,12 @@ variables:
 
 .svace_rules:
   rules:
-    - if: $CI_MERGE_REQUEST_LABELS =~ /(^|,)analyze\/svace(,|$)/
+    - if: '$CI_MERGE_REQUEST_LABELS =~ /(^|,)analyze\/svace(,|$)/'
       variables:
         SVACE_ENABLED: "true"
-    - if: $CI_PIPELINE_SOURCE == "web" && $[[ inputs.SVACE_ENABLED ]] == "true"
+    - if: $CI_PIPELINE_SOURCE == "web" && $SVACE_ENABLED == "true"
       variables:
         SVACE_ENABLED: "true"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $[[ inputs.SVACE_ENABLED ]] == "true"
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SVACE_ENABLED == "true"
       variables:
         SVACE_ENABLED: "true"
