@@ -49,6 +49,9 @@ variables:
           echo "Using new ssh agent pid: ${SSH_AGENT_PID}"
           echo "Using new ssh auth sock: ${SSH_AUTH_SOCK}"
       fi
+
+      ssh-add - <<< "$SVACE_ANALYZE_SSH_PRIVATE_KEY"
+
     # Add Svace analyze host to known_hosts
     - |
       host=${SVACE_ANALYZE_HOST}
