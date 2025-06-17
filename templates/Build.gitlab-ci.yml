@@ -77,11 +77,11 @@ variables:
         SVACE_ENABLED: "true"
 .svace_rules_manual:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "web" && $SVACE_ENABLED == "true" && CI_COMMIT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "web" && $SVACE_ENABLED == "true" && $CI_COMMIT_BRANCH
       variables:
         SVACE_ENABLED: "true"
 .svace_rules_schedule:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SVACE_ENABLED == "true" && CI_COMMIT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SVACE_ENABLED == "true" && $CI_COMMIT_BRANCH
       variables:
         SVACE_ENABLED: "true"
