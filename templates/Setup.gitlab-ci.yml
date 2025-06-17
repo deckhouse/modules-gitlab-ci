@@ -1,8 +1,9 @@
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
   MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
-  BASE_IMAGES_VERSION: v0.2
+  BASE_IMAGES_VERSION: v0.5.7
   WERF_REPO: ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
+  WERF_VERSION: "2"
 
 before_script:
   # Setup trdl
@@ -16,7 +17,7 @@ before_script:
   # Setup werf
   - |
     trdl add werf https://tuf.werf.io 1 b7ff6bcbe598e072a86d595a3621924c8612c7e6dc6a82e919abe89707d7e3f468e616b5635630680dd1e98fc362ae5051728406700e6274c5ed1ad92bea52a2
-    source $(trdl use werf ${WERF_VERSION:-1.2 stable})
+    source $(trdl use werf ${WERF_VERSION:-1.2} stable)
     source $(werf ci-env gitlab --as-file)
 
     # Login to gitlab registry by default
@@ -28,6 +29,9 @@ before_script:
     fi
     werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
 
+    if [[ -n "${DEV_MODULES_REGISTRY_LOGIN}" && -n "${DEV_MODULES_REGISTRY_PASSWORD}" && -n "${DEV_MODULES_REGISTRY}" ]]; then
+      werf cr login -u ${DEV_MODULES_REGISTRY_LOGIN} -p ${DEV_MODULES_REGISTRY_PASSWORD} ${DEV_MODULES_REGISTRY}
+    fi
   # Setup dmt
   - |
     trdl add dmt https://trrr.flant.dev/trdl-dmt/ 3 e77d785600a8c8612b84b93a5a2e4c48188d68f7478356d0708213e928bf67b024ed412e702dc32930da5c5bfc9b1c44be3ee7a292f923327815c91c6c3c3833
@@ -36,6 +40,42 @@ before_script:
   # Download base images yaml file
   - env | grep BASE_IMAGES_VERSION
   - curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
+
+  # Add ssh keys
+  - |
+    [[ -z "${SOURCE_REPO_SSH_KEY}" || -z "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]] && exit 0
+
+    eval $(ssh-agent)
+    trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
+    [[ -n "${SOURCE_REPO_SSH_KEY}" ]] && ssh-add - <<< "${SOURCE_REPO_SSH_KEY}"
+    [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]] && ssh-add - <<< "${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
+
+    export SSH_KNOWN_HOSTS=~/.ssh/known_hosts
+    mkdir -p ~/.ssh
+    touch ~/.ssh/known_hosts
+
+    [[ -z "${SOURCE_REPO}" ]] && exit 0
+    HOST=$(grep -oP '(?<=@)[^/:]+' <<< ${SOURCE_REPO})
+    HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
+    while IFS= read -r KEY_LINE; do
+      CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
+      if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
+        echo "$KEY_LINE" >> ~/.ssh/known_hosts
+      fi
+    done <<< "$HOST_KEYS"
+
+    [[ -z "${SVACE_ANALYZE_HOST}" ]] && exit 0
+    echo "Adding svace ssh key (ignoring errors)."
+    set +e
+    HOST=${SVACE_ANALYZE_HOST}
+    HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
+    while IFS= read -r KEY_LINE; do
+      CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
+      if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
+        echo "$KEY_LINE" >> ~/.ssh/known_hosts
+      fi
+    done <<< "$HOST_KEYS"
+    set -e
 stages:
   - build
   - deploy
