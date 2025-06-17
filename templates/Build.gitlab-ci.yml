@@ -70,14 +70,18 @@ variables:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
 
-.svace_rules:
+.svace_rules_mr:
   rules:
     - if: '$CI_MERGE_REQUEST_LABELS =~ /(^|,)analyze\/svace(,|$)/'
       variables:
         SVACE_ENABLED: "true"
-    - if: $CI_PIPELINE_SOURCE == "web" && $SVACE_ENABLED == "true"
+.svace_rules_manual:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web" && $SVACE_ENABLED == "true" && CI_COMMIT_BRANCH
       variables:
         SVACE_ENABLED: "true"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SVACE_ENABLED == "true"
+.svace_rules_schedule:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SVACE_ENABLED == "true" && CI_COMMIT_BRANCH
       variables:
         SVACE_ENABLED: "true"
