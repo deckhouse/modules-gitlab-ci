@@ -35,6 +35,14 @@ variables:
   script:
     # Build images
     - |
+      if [[ -z "${DEV_MODULES_REGISTRY_LOGIN}" && -z "${DEV_MODULES_REGISTRY_PASSWORD}" && -z "${DEV_MODULES_REGISTRY}" ]]; then
+        werf build \
+          --save-build-report --build-report-path images_tags_werf.json
+      else
+        werf build \
+          --repo=${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME} \
+          --save-build-report --build-report-path images_tags_werf.json
+      fi
       werf build \
         --save-build-report --build-report-path images_tags_werf.json
     # Bundle image
