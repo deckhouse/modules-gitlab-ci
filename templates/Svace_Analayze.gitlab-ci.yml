@@ -259,6 +259,7 @@ variables:
           fi
       }
 
+      echo "Searching for current build artifacts on server by path: /${SVACE_ANALYZE_DIR}/${COMMIT_HASH}"
       if [[ $(send "[[ -d /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} ]] && echo true || echo false") == false ]]; then
         echo "::warning file=$(realpath "$0")::Specified commit directory doesn't exists on analyze server." && exit 0
       fi
