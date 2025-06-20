@@ -9,6 +9,7 @@
       fi
 
       # Login to target registry
+      echo "Login to target registry ${MODULES_REGISTRY}..."
       werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
     # generate MODULES_MODULE_SOURCE
     - |
