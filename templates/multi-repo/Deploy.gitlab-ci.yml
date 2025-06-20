@@ -2,6 +2,8 @@
   stage: deploy
   script:
     - |
+      printenv | sort
+    - |
       # Login to Gitlab (source) registry if target registry is not same Gitlab
       if [[ "x${MODULES_REGISTRY}" != "x${CI_REGISTRY}" ]]; then
         echo "Login to Gitlab (source) ${CI_REGISTRY}..."
