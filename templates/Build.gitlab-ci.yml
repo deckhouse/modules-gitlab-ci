@@ -2,23 +2,20 @@
 #   $MODULES_MODULE_SOURCE - base URL for the registry, e.g., registry.example.com/deckhouse/modules
 #   $MODULES_MODULE_NAME (Optional) - module name, by default it is equal to the project name
 #   $WERF_REPO - registry path, default ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
+#   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
+#   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
+#   SVACE_ANALYZE_SSH_PRIVATE_KEY- svace analyze server ssh private key
 
 variables:
+  WERF_REPO:
+    description: "Container registry storage address"
+    value: ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
   SVACE_ENABLED:
     description: "Enable Svace analysis"
     value: "false"
     options:
       - "true"
       - "false"
-#   SVACE_ANALYZE_HOST:
-#     description: "hostname of the svace analyze vm"
-#     value: "${SVACE_ANALYZE_HOST}"
-#   SVACE_ANALYZE_SSH_USER:
-#     description: "ssh user to connect with to svace analyze vm"
-#     value: "${SVACE_ANALYZE_SSH_USER}"
-#   SVACE_ANALYZE_SSH_PRIVATE_KEY:
-#     description: "svace analyze server ssh private key"
-#     value: "${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
 
 .lint:
   stage: build
@@ -35,16 +32,9 @@ variables:
   script:
     # Build images
     - |
-      if [[ -z "${DEV_MODULES_REGISTRY_LOGIN}" && -z "${DEV_MODULES_REGISTRY_PASSWORD}" && -z "${DEV_MODULES_REGISTRY}" ]]; then
-        werf build \
-          --save-build-report --build-report-path images_tags_werf.json
-      else
-        werf build \
-          --repo=${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME} \
-          --save-build-report --build-report-path images_tags_werf.json
-      fi
       werf build \
         --save-build-report --build-report-path images_tags_werf.json
+
     # Bundle image
     - |
       IMAGE_SRC="$(jq -r '.Images."bundle".DockerImageName' images_tags_werf.json)"
