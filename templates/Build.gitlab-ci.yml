@@ -3,6 +3,23 @@
 #   $MODULES_MODULE_NAME (Optional) - module name, by default it is equal to the project name
 #   $WERF_REPO - registry path, default ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
 
+variables:
+  SVACE_ENABLED:
+    description: "Enable Svace analysis"
+    value: "false"
+    options:
+      - "true"
+      - "false"
+#   SVACE_ANALYZE_HOST:
+#     description: "hostname of the svace analyze vm"
+#     value: "${SVACE_ANALYZE_HOST}"
+#   SVACE_ANALYZE_SSH_USER:
+#     description: "ssh user to connect with to svace analyze vm"
+#     value: "${SVACE_ANALYZE_SSH_USER}"
+#   SVACE_ANALYZE_SSH_PRIVATE_KEY:
+#     description: "svace analyze server ssh private key"
+#     value: "${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
+
 .lint:
   stage: build
   script:
@@ -41,6 +58,18 @@
         --oci-empty-base \
         --new_layer "" \
         --new_tag "${MODULES_MODULE_SOURCE}:${MODULES_MODULE_NAME}"
+  only:
+    - tags
+    - branches
+
+.svace_rules:
   rules:
-    - if: $CI_COMMIT_BRANCH
-    - if: $CI_COMMIT_TAG
+    - if: '$CI_MERGE_REQUEST_LABELS =~ /(^|,)analyze\/svace(,|$)/'
+      variables:
+        SVACE_ENABLED: "true"
+    - if: $CI_PIPELINE_SOURCE == "web" && $[[ inputs.SVACE_ENABLED ]] == "true"
+      variables:
+        SVACE_ENABLED: "true"
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $[[ inputs.SVACE_ENABLED ]] == "true"
+      variables:
+        SVACE_ENABLED: "true"
