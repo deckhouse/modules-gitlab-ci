@@ -22,13 +22,6 @@ CVE_SEVERITY - Set CVE severity levels to scan. Default is: UNKNOWN,LOW,MEDIUM,H
 CVE_SCAN_SEVERAL_LASTEST_RELEASES - true/false. Whether to scan last several releases or not. For scheduled pipelines override will not work as value is always true.
 ```
 
-### Pipeline variables section
-```
-CVE_RELEASE_TO_SCAN - Set minor version of release you want to scan. e.g.: 1.23
-CVE_SEVERITY - Set CVE severity levels to scan. Default is: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-CVE_SCAN_SEVERAL_LASTEST_RELEASES - true/false. Whether to scan last several releases or not. For scheduled pipelines override will not work as value is always true.
-```
-
 ### Job level
 
 #### Mandatory
