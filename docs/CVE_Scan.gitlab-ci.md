@@ -1,9 +1,9 @@
 # CVE_Scan CI Integration
 
 ## Description
-This CI file will run a Trivy CVE scan against the module images and its submodule images, and then upload the reports to DefectDojo.  
-The script will detect release or dev tag of module image is used and then construct registry location by itself. If your module located in registries by not standart paths - you may want to define custom path by *MODULE_PROD_REGISTRY_CUSTOM_PATH* and *MODULE_DEV_REGISTRY_CUSTOM_PATH* variables.  
-CI Use cases:  
+This CI file will run a Trivy CVE scan against the module images and its submodule images, and then upload the reports to DefectDojo.
+The script will detect release or dev tag of module image is used and then construct registry location by itself. If your module located in registries by not standart paths - you may want to define custom path by *MODULE_PROD_REGISTRY_CUSTOM_PATH* and *MODULE_DEV_REGISTRY_CUSTOM_PATH* variables.
+CI Use cases:
 - Scan by scheduler
   - Scan main branch and several latest releases 2-3 times a week
 - Scan on PR
@@ -14,6 +14,13 @@ CI Use cases:
   - Scan only main branch just by running pipeline
 
 ## Variables
+
+### Pipeline variables section
+```
+CVE_RELEASE_TO_SCAN - Set minor version of release you want to scan. e.g.: 1.23
+CVE_SEVERITY - Set CVE severity levels to scan. Default is: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+CVE_SCAN_SEVERAL_LASTEST_RELEASES - true/false. Whether to scan last several releases or not. For scheduled pipelines override will not work as value is always true.
+```
 
 ### Pipeline variables section
 ```
@@ -61,7 +68,7 @@ DEV_REGISTRY_PASSWORD - password to log in to deckhouse dev registry
 
 ## How to include
 
-At the top of your main .gitlab-ci.yml define include section:  
+At the top of your main .gitlab-ci.yml define include section:
 ```
 include:
   - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/v2.0/templates/CVE_Scan.gitlab-ci.yml'
@@ -81,14 +88,14 @@ variables:
     description: "Optional. true/false. Whether to scan last several releases or not. For scheduled pipelines override will not work as value is always true."
 ```
 
-Add cve_scan stage in a propper place in stages sequence (usually after build stage):  
+Add cve_scan stage in a propper place in stages sequence (usually after build stage):
 ```
 stages:
   - cve_scan
 ```
 
-Then choose a propper place in your pipeline to put CVE scan job (usually after build stage) and add required variables.  
-Example:  
+Then choose a propper place in your pipeline to put CVE scan job (usually after build stage) and add required variables.
+Example:
 ```
 cve_scan:
   stage: cve_scan
@@ -134,5 +141,5 @@ cve_scan:
       variables:
         TAG: ${CVE_RELEASE_TO_SCAN}
 ```
-Please note, that some variables can be used as global in 'variables' section of your .gitlab-ci file.  
+Please note, that some variables can be used as global in 'variables' section of your .gitlab-ci file.
 You can also define required rules to execute this job depend on your workflow needs.

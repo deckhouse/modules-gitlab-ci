@@ -58,13 +58,13 @@ variables:
         --oci-empty-base \
         --new_layer "" \
         --new_tag "${MODULES_MODULE_SOURCE}:${MODULES_MODULE_NAME}"
-  only:
-    - tags
-    - branches
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 .svace_rules:
   rules:
-    - if: '$CI_MERGE_REQUEST_LABELS =~ /(^|,)analyze\/svace(,|$)/'
+    - if: $CI_MERGE_REQUEST_LABELS =~ /(^|,)analyze\/svace(,|$)/
       variables:
         SVACE_ENABLED: "true"
     - if: $CI_PIPELINE_SOURCE == "web" && $[[ inputs.SVACE_ENABLED ]] == "true"
