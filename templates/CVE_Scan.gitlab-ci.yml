@@ -39,20 +39,19 @@
     - |
       echo "Preparing DOCKER_CONFIG and login to registries"
       mkdir -p "${workdir}/docker"
-      export DOCKER_CONFIG="${workdir}/docker"
-      cat > "${DOCKER_CONFIG}/config.json" << EOL
+      cat > "${workdir}/docker/config.json" << EOL
       {
               "auths": {
                       "${PROD_REGISTRY}": {
                               "auth": "$(echo -n "${PROD_REGISTRY_USER}:${PROD_REGISTRY_PASSWORD}" | base64)"
                       },
-                      {
                       "${DEV_REGISTRY}": {
                               "auth": "$(echo -n "${DEV_REGISTRY_USER}:${DEV_REGISTRY_PASSWORD}" | base64)"
                       }
               }
       }
       EOL
+      export DOCKER_CONFIG="${workdir}/docker"
       echo docker login "${PROD_REGISTRY}"
       echo docker login "${DEV_REGISTRY}"
       echo
