@@ -1,8 +1,26 @@
+# variables:
+#   $MODULES_MODULE_SOURCE - base URL for the registry, e.g., registry.example.com/deckhouse/modules
+#   $MODULES_MODULE_NAME (Optional) - module name, by default it is equal to the project name
+#   $WERF_REPO - registry path, default ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
+#   $DEV_MODULES_REGISTRY - dev registry path
+#   $DEV_MODULES_REGISTRY_LOGIN - login to dev registry
+#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
+#   $SOURCE_REPO - Source repository address for the module
+#   $SOURCE_REPO_SSH_KEY - SSH private key for the source repository
+#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
+#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
+#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
+#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
+#   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
+#   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
+#   SVACE_ANALYZE_SSH_PRIVATE_KEY- svace analyze server ssh private key
+
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
   MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
-  BASE_IMAGES_VERSION: v0.2
+  BASE_IMAGES_VERSION: v0.5.7
   WERF_REPO: ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
+  WERF_VERSION: "2 stable"
 
 before_script:
   # Setup trdl
@@ -28,6 +46,9 @@ before_script:
     fi
     werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
 
+    if [[ -n "${DEV_MODULES_REGISTRY_LOGIN}" && -n "${DEV_MODULES_REGISTRY_PASSWORD}" && -n "${DEV_MODULES_REGISTRY}" ]]; then
+      werf cr login -u ${DEV_MODULES_REGISTRY_LOGIN} -p ${DEV_MODULES_REGISTRY_PASSWORD} ${DEV_MODULES_REGISTRY}
+    fi
   # Setup dmt
   - |
     trdl add dmt https://trrr.flant.dev/trdl-dmt/ 3 e77d785600a8c8612b84b93a5a2e4c48188d68f7478356d0708213e928bf67b024ed412e702dc32930da5c5bfc9b1c44be3ee7a292f923327815c91c6c3c3833
@@ -36,6 +57,48 @@ before_script:
   # Download base images yaml file
   - env | grep BASE_IMAGES_VERSION
   - curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
+
+  # Add ssh keys
+  - |
+    [[ -z "${SOURCE_REPO_SSH_KEY}" || -z "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]] && exit 0
+
+    eval $(ssh-agent)
+    trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
+    export SSH_KNOWN_HOSTS=~/.ssh/known_hosts
+    mkdir -p ~/.ssh
+    touch ~/.ssh/known_hosts
+
+    if [[ -n "${SOURCE_REPO_SSH_KEY}" ]]; then
+      ssh-add - <<< "${SOURCE_REPO_SSH_KEY}"
+      if [[ -n "${SOURCE_REPO}" ]]; then
+        HOST=$(grep -oP '(?<=@)[^/:]+' <<< ${SOURCE_REPO})
+        HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
+        while IFS= read -r KEY_LINE; do
+          CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
+          if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
+            echo "$KEY_LINE" >> ~/.ssh/known_hosts
+          fi
+        done <<< "$HOST_KEYS"
+      fi
+    fi
+
+    if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
+      ssh-add - <<< "${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
+      if [[ -n "${SVACE_ANALYZE_HOST}" ]]; then
+        echo "Adding svace ssh key (ignoring errors)."
+        set +e
+        HOST=${SVACE_ANALYZE_HOST}
+        HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
+        while IFS= read -r KEY_LINE; do
+          CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
+          if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
+            echo "$KEY_LINE" >> ~/.ssh/known_hosts
+          fi
+        done <<< "$HOST_KEYS"
+        set -e
+      fi
+    fi
+
 stages:
   - build
   - deploy
