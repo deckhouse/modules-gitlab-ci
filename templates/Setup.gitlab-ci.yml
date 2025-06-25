@@ -60,42 +60,43 @@ before_script:
 
   # Add ssh keys
   - |
-    [[ -z "${SOURCE_REPO_SSH_KEY}" || -z "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]] && exit 0
+    if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
 
-    eval $(ssh-agent)
-    trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
-    export SSH_KNOWN_HOSTS=~/.ssh/known_hosts
-    mkdir -p ~/.ssh
-    touch ~/.ssh/known_hosts
+      eval $(ssh-agent)
+      trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
+      export SSH_KNOWN_HOSTS=~/.ssh/known_hosts
+      mkdir -p ~/.ssh
+      touch ~/.ssh/known_hosts
 
-    if [[ -n "${SOURCE_REPO_SSH_KEY}" ]]; then
-      ssh-add - <<< "${SOURCE_REPO_SSH_KEY}"
-      if [[ -n "${SOURCE_REPO}" ]]; then
-        HOST=$(grep -oP '(?<=@)[^/:]+' <<< ${SOURCE_REPO})
-        HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
-        while IFS= read -r KEY_LINE; do
-          CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
-          if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
-            echo "$KEY_LINE" >> ~/.ssh/known_hosts
-          fi
-        done <<< "$HOST_KEYS"
+      if [[ -n "${SOURCE_REPO_SSH_KEY}" ]]; then
+        ssh-add - <<< "${SOURCE_REPO_SSH_KEY}"
+        if [[ -n "${SOURCE_REPO}" ]]; then
+          HOST=$(grep -oP '(?<=@)[^/:]+' <<< ${SOURCE_REPO})
+          HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
+          while IFS= read -r KEY_LINE; do
+            CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
+            if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
+              echo "$KEY_LINE" >> ~/.ssh/known_hosts
+            fi
+          done <<< "$HOST_KEYS"
+        fi
       fi
-    fi
 
-    if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
-      ssh-add - <<< "${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
-      if [[ -n "${SVACE_ANALYZE_HOST}" ]]; then
-        echo "Adding svace ssh key (ignoring errors)."
-        set +e
-        HOST=${SVACE_ANALYZE_HOST}
-        HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
-        while IFS= read -r KEY_LINE; do
-          CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
-          if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
-            echo "$KEY_LINE" >> ~/.ssh/known_hosts
-          fi
-        done <<< "$HOST_KEYS"
-        set -e
+      if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
+        ssh-add - <<< "${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
+        if [[ -n "${SVACE_ANALYZE_HOST}" ]]; then
+          echo "Adding svace ssh key (ignoring errors)."
+          set +e
+          HOST=${SVACE_ANALYZE_HOST}
+          HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
+          while IFS= read -r KEY_LINE; do
+            CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
+            if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
+              echo "$KEY_LINE" >> ~/.ssh/known_hosts
+            fi
+          done <<< "$HOST_KEYS"
+          set -e
+        fi
       fi
     fi
 
