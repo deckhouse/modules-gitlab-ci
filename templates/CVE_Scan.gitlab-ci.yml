@@ -35,10 +35,25 @@
       echo
       echo "======================================================="
       echo
-    # Login to registries
+    # Preparing DOCKER_CONFIG and login to registries
     - |
-      echo ${PROD_REGISTRY_PASSWORD} | docker login --username="${PROD_REGISTRY_USER}" --password-stdin ${PROD_REGISTRY}
-      echo ${DEV_REGISTRY_PASSWORD} | docker login --username="${DEV_REGISTRY_USER}" --password-stdin ${DEV_REGISTRY}
+      echo "Preparing DOCKER_CONFIG and login to registries"
+      mkdir -p "${workdir}/docker"
+      cat > "${workdir}/docker/config.json" << EOL
+      {
+              "auths": {
+                      "${PROD_REGISTRY}": {
+                              "auth": "$(echo -n "${PROD_REGISTRY_USER}:${PROD_REGISTRY_PASSWORD}" | base64)"
+                      },
+                      "${DEV_REGISTRY}": {
+                              "auth": "$(echo -n "${DEV_REGISTRY_USER}:${DEV_REGISTRY_PASSWORD}" | base64)"
+                      }
+              }
+      }
+      EOL
+      export DOCKER_CONFIG="${workdir}/docker"
+      echo docker login "${PROD_REGISTRY}"
+      echo docker login "${DEV_REGISTRY}"
       echo
       echo "======================================================="
       echo
