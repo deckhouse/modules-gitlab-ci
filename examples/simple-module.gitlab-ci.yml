@@ -1,7 +1,8 @@
 include:
-- remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/Setup.gitlab-ci.yml'
-- remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/Build.gitlab-ci.yml'
-- remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/Deploy.gitlab-ci.yml'
+- remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/v2.0/templates/Setup.gitlab-ci.yml'
+- remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/v2.0/templates/Build.gitlab-ci.yml'
+- remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/v2.0/templates/Deploy.gitlab-ci.yml'
+- remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/v2.0/templates/CVE_Scan.gitlab-ci.yml'
 
 variables:
   # Do not forget to put
@@ -16,33 +17,93 @@ default:
   - my-runner-tag
 
 # ---
+stages:
+  - lint
+  - build
+  - go_checks
+  - cve_scan
+  - deploy_prod_alpha
+  - deploy_prod_beta
+  - deploy_prod_ea
+  - deploy_prod_stable
+  - deploy_prod_rock_solid
+
 Lint:
+  stage: lint
   extends: .lint
 
 Build:
+  stage: build
   extends: .build
 
+cve_scan:
+  stage: cve_scan
+  before_script:
+    # Override default before_script as not needed
+    - |
+      echo "Executing CVE Scan"
+  variables:
+    TAG: $MODULES_MODULE_TAG
+    MODULE_NAME: $MODULES_MODULE_NAME
+    DEV_REGISTRY: ${DEV_REGISTRY}
+    DEV_REGISTRY_PASSWORD: ${DEV_REGISTRY_PASSWORD}
+    DEV_REGISTRY_USER: ${DEV_REGISTRY_LOGIN}
+    PROD_REGISTRY: ${PROD_READ_REGISTRY}
+    PROD_REGISTRY_USER: ${PROD_READ_REGISTRY_USER}
+    PROD_REGISTRY_PASSWORD: ${PROD_READ_REGISTRY_USER}
+    SEVERITY: ${CVE_SEVERITY}
+    SCAN_SEVERAL_LASTEST_RELEASES: ${CVE_SCAN_SEVERAL_LASTEST_RELEASES}
+  extends:
+    - .cve_scan
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      needs: ["Build"]
+      variables:
+        TAG: mr${CI_MERGE_REQUEST_IID}
+        SEVERITY: "HIGH,CRITICAL"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      needs: ["Build"]
+      variables:
+        TAG: ${CI_DEFAULT_BRANCH}
+        SEVERITY: "HIGH,CRITICAL"
+    - if: $CI_COMMIT_TAG && $CI_COMMIT_BRANCH != "main"
+      variables:
+        TAG: ${CI_COMMIT_TAG}
+        SEVERITY: "HIGH,CRITICAL"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      variables:
+        LATEST_RELEASES_AMOUNT: 3
+    - if: $CI_PIPELINE_SOURCE == "web"
+      variables:
+        TAG: ${CVE_RELEASE_TO_SCAN}
+
 Deploy to Alpha:
+  stage: deploy_prod_alpha
   extends: .deploy
   variables:
     RELEASE_CHANNEL: alpha
 
 Deploy to Beta:
+  stage: deploy_prod_beta
   extends: .deploy
   variables:
     RELEASE_CHANNEL: beta
 
 Deploy to EarlyAccess:
+  stage: deploy_prod_ea
   extends: .deploy
   variables:
     RELEASE_CHANNEL: early-access
 
 Deploy to Stable:
+  stage: deploy_prod_stable
   extends: .deploy
   variables:
     RELEASE_CHANNEL: stable
 
 Deploy to RockSolid:
+  stage: deploy_prod_rock_solid
   extends: .deploy
   variables:
     RELEASE_CHANNEL: rock-solid

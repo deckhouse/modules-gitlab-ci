@@ -15,6 +15,6 @@
 
     echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
     crane copy "${IMAGE_SRC}" "${IMAGE_DST}"
-  only:
-    - tags
+  rules:
+    - if: $CI_COMMIT_TAG
   when: manual
