@@ -1,3 +1,18 @@
+# Required CI/CD variables (must be defined in Gitlab's project/group settings):
+#   $DEV_MODULES_REGISTRY - dev registry URL (WITHOUT http/https prefix and path part) (like: registry.example.com)
+#   $DEV_MODULES_REGISTRY_PATH - dev registry path (to modules folder) part (like: sys/deckhouse-oss/modules)
+#   $DEV_MODULES_REGISTRY_LOGIN - login for dev registry (same as module name for most cases)
+#   $DEV_MODULES_REGISTRY_PASSWORD - password for dev registry
+
+#   $PROD_MODULES_REGISTRY - production registry URL (WITHOUT http/https prefix and path part)
+#   $PROD_MODULES_REGISTRY_PATH - prod registry path (to modules folder) part
+#   $PROD_MODULES_REGISTRY_LOGIN - login for prod registry
+#   $PROD_MODULES_REGISTRY_PASSWORD - password for prod registry
+
+#   $SVACE_ANALYZE_HOST - hostname of the svace analyze vm
+#   $SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
+#   $SVACE_ANALYZE_SSH_PRIVATE_KEY- svace analyze server ssh private key
+
 variables:
   ##############################
   # User default settings
@@ -9,18 +24,32 @@ variables:
   # `Auto cleanup` job is run randomly, only if current second is divisible by 10
   AUTO_CLEANUP:
     value: "true"
+    options:
+      - "true"
+      - "false"
     description: "`Auto cleanup` job is run randomly (if enabled), only if current second is divisible by 10"
+
+  SVACE_ENABLED:
+    value: "false"
+    description: "Enable Svace static analysis"
+    options:
+      - "true"
+      - "false"
 
   ##############################
   # Internal default settings
   ##############################
-  BASE_IMAGES_VERSION: v0.5.2
+  BASE_IMAGES_VERSION: v0.5.9
   FORCE_CI:
     value: "false"
+    options:
+      - "true"
+      - "false"
     description: "Set to true if need force run workflow"
 
   # use module's container registry (on Gitlab) as werf's intermediate/cache images registry (repo with all build-time artifacts (garbage))
   WERF_REPO: ${CI_REGISTRY_IMAGE}/${MODULES_MODULE_NAME}
+  WERF_VERSION: "2 stable"
 
 stages:
   - lint
@@ -87,4 +116,46 @@ stages:
         curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
       else
         echo "DO NOT download base_images.yml because BASE_IMAGES_VERSION is empty"
+      fi
+
+    # Add ssh keys
+    - |
+      if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
+
+        eval $(ssh-agent)
+        trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
+        export SSH_KNOWN_HOSTS=~/.ssh/known_hosts
+        mkdir -p ~/.ssh
+        touch ~/.ssh/known_hosts
+
+        if [[ -n "${SOURCE_REPO_SSH_KEY}" ]]; then
+          ssh-add - <<< "${SOURCE_REPO_SSH_KEY}"
+          if [[ -n "${SOURCE_REPO}" ]]; then
+            HOST=$(grep -oP '(?<=@)[^/:]+' <<< ${SOURCE_REPO})
+            HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
+            while IFS= read -r KEY_LINE; do
+              CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
+              if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
+                echo "$KEY_LINE" >> ~/.ssh/known_hosts
+              fi
+            done <<< "$HOST_KEYS"
+          fi
+        fi
+
+        if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
+          ssh-add - <<< "${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
+          if [[ -n "${SVACE_ANALYZE_HOST}" ]]; then
+            echo "Adding svace ssh key (ignoring errors)."
+            set +e
+            HOST=${SVACE_ANALYZE_HOST}
+            HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
+            while IFS= read -r KEY_LINE; do
+              CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
+              if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
+                echo "$KEY_LINE" >> ~/.ssh/known_hosts
+              fi
+            done <<< "$HOST_KEYS"
+            set -e
+          fi
+        fi
       fi
