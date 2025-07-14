@@ -5,9 +5,9 @@
 #   $DEV_MODULES_REGISTRY - dev registry path
 #   $DEV_MODULES_REGISTRY_LOGIN - login to dev registry
 #   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
-#   $PROD_MODULES_REGISTRY - dev registry path
-#   $PROD_MODULES_REGISTRY_LOGIN - login to dev registry
-#   $PROD_MODULES_REGISTRY_PASSWORD - password to dev registry
+#   $PROD_MODULES_REGISTRY - prod registry path
+#   $PROD_MODULES_REGISTRY_LOGIN - login to prod registry
+#   $PROD_MODULES_REGISTRY_PASSWORD - password to prod registry
 #   $SOURCE_REPO - Source repository address for the module
 #   $SOURCE_REPO_SSH_KEY - SSH private key for the source repository
 #   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
