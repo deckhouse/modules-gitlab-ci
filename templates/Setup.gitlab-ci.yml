@@ -13,6 +13,8 @@
 #   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
 #   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
 #   SVACE_ANALYZE_SSH_PRIVATE_KEY- svace analyze server ssh private key
+#   MODULE_EDITION (Optional) - one of [ce,fe,be,se,se-plus], only needed to check ALLOW_BE for the basic edition.
+#   ALLOW_BE (Optional) - if MODULE_EDITION=be, must be set to "true" for the build/deploy.
 
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
@@ -22,6 +24,15 @@ variables:
   WERF_VERSION: "2 stable"
 
 before_script:
+  # Deny BE without ALLOW_BE=true
+  - |
+    echo "=== Check ALLOW_BE ==="
+    echo "MODULE_EDITION: ${MODULE_EDITION}"
+    echo "ALLOW_BE: ${ALLOW_BE}"
+    if [[ ${MODULE_EDITION} == "be" && ${ALLOW_BE} != "true" ]]; then
+      echo "BE edition don't allowed without ALLOW_BE=true"
+      exit 0
+    fi
   # Setup tag
   - |
     echo "=== Setup tag ==="
