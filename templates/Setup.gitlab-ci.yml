@@ -5,12 +5,11 @@
 #   $DEV_MODULES_REGISTRY - dev registry path
 #   $DEV_MODULES_REGISTRY_LOGIN - login to dev registry
 #   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
+#   $PROD_MODULES_REGISTRY - dev registry path
+#   $PROD_MODULES_REGISTRY_LOGIN - login to dev registry
+#   $PROD_MODULES_REGISTRY_PASSWORD - password to dev registry
 #   $SOURCE_REPO - Source repository address for the module
 #   $SOURCE_REPO_SSH_KEY - SSH private key for the source repository
-#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
-#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
-#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
-#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
 #   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
 #   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
 #   SVACE_ANALYZE_SSH_PRIVATE_KEY- svace analyze server ssh private key
