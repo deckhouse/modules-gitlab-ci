@@ -17,19 +17,21 @@
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
   MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
-  BASE_IMAGES_VERSION: v0.5.7
+  BASE_IMAGES_VERSION: v0.5.8
   WERF_REPO: ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
   WERF_VERSION: "2 stable"
 
 before_script:
   # Setup tag
   - |
+    echo "=== Setup tag ==="
     if [[ ${CI_COMMIT_REF_NAME} != "main" ]]; then
       export MODULES_MODULE_TAG=$(echo "${CI_COMMIT_REF_NAME}"|sed -e 's/\//-/g')
     fi
     echo "MODULES_MODULE_TAG: ${MODULES_MODULE_TAG}"
   # Setup trdl
   - |
+    echo "=== Setup trdl ==="
     trdl_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
     curl -sSLO "https://tuf.trdl.dev/targets/releases/$trdl_version/linux-amd64/bin/trdl"
     install -D trdl ~/bin/trdl
@@ -38,6 +40,7 @@ before_script:
 
   # Setup werf
   - |
+    echo "=== Setup werf ==="
     trdl add werf https://tuf.werf.io 1 b7ff6bcbe598e072a86d595a3621924c8612c7e6dc6a82e919abe89707d7e3f468e616b5635630680dd1e98fc362ae5051728406700e6274c5ed1ad92bea52a2
     source $(trdl use werf ${WERF_VERSION:-1.2 stable})
     source $(werf ci-env gitlab --as-file)
@@ -50,24 +53,33 @@ before_script:
       MODULES_REGISTRY_PASSWORD="${CI_REGISTRY_PASSWORD}"
     fi
     
+  - |
+    echo "=== Werf login ==="
     echo "MODULES_REGISTRY_LOGIN: ${MODULES_REGISTRY_LOGIN}"
     echo "MODULES_REGISTRY: ${MODULES_REGISTRY}"
     werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
 
+  - |
+    echo "=== Werf dev login ==="
     if [[ -n "${DEV_MODULES_REGISTRY_LOGIN}" && -n "${DEV_MODULES_REGISTRY_PASSWORD}" && -n "${DEV_MODULES_REGISTRY}" ]]; then
       werf cr login -u ${DEV_MODULES_REGISTRY_LOGIN} -p ${DEV_MODULES_REGISTRY_PASSWORD} ${DEV_MODULES_REGISTRY}
     fi
+
   # Setup dmt
   - |
+    echo "=== Werf dmt ==="
     trdl add dmt https://trrr.flant.dev/trdl-dmt/ 3 e77d785600a8c8612b84b93a5a2e4c48188d68f7478356d0708213e928bf67b024ed412e702dc32930da5c5bfc9b1c44be3ee7a292f923327815c91c6c3c3833
     source $(trdl use dmt 0 stable)
 
   # Download base images yaml file
-  - env | grep BASE_IMAGES_VERSION
-  - curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
+  - |
+    echo "=== Download base images yaml file ==="
+    echo "BASE_IMAGES_VERSION: ${BASE_IMAGES_VERSION}"
+    curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
 
   # Add ssh keys
   - |
+    echo "=== Add ssh keys ==="
     if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
 
       eval $(ssh-agent)
