@@ -29,6 +29,8 @@ before_script:
     echo "=== Check edition is allowed ==="
     echo "ALLOWED_EDITIONS: ${ALLOWED_EDITIONS}"
     echo "MODULE_EDITION: ${MODULE_EDITION}"
+
+    # "-n $MODULE_EDITION" needed to skip validations for dev build/deploy
     if [[ -n $MODULE_EDITION && ! " ${ALLOWED_EDITIONS[@]} " =~ " ${MODULE_EDITION} " ]]; then
       echo "Edition '${MODULE_EDITION}' is not allowed"
       exit 77
