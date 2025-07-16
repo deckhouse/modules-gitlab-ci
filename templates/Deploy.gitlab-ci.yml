@@ -4,6 +4,7 @@
 #   $RELEASE_CHANNEL - lowercase release channel name, e.g., alpha, stable, early-access
 
 
+# before this script templates/Setup.gitlab-ci.yml will be executed
 .deploy:
   stage: deploy
   script:

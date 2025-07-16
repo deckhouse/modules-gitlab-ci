@@ -13,8 +13,8 @@
 #   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
 #   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
 #   SVACE_ANALYZE_SSH_PRIVATE_KEY- svace analyze server ssh private key
-#   MODULE_EDITION (Optional) - one of [ce,fe,be,se,se-plus], only needed to check ALLOW_BE for the basic edition.
-#   ALLOW_BE (Optional) - if MODULE_EDITION=be, must be set to "true" for the build/deploy.
+#   MODULE_EDITION (Optional) - one of [ce,fe,be,ee,se,se-plus], only needed to allowance edition, if not set, allowance will be skipped.
+#   ALLOWED_EDITIONS - must set like "ce fe be ee se se-plus" (with spaces), used to check MODULE_EDITION is allowed.
 
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
@@ -24,14 +24,14 @@ variables:
   WERF_VERSION: "2 stable"
 
 before_script:
-  # Deny BE without ALLOW_BE=true
+  # Deny edition without allowance
   - |
-    echo "=== Check ALLOW_BE ==="
+    echo "=== Check edition is allowed ==="
+    echo "ALLOWED_EDITIONS: ${ALLOWED_EDITIONS}"
     echo "MODULE_EDITION: ${MODULE_EDITION}"
-    echo "ALLOW_BE: ${ALLOW_BE}"
-    if [[ ${MODULE_EDITION} == "be" && ${ALLOW_BE} != "true" ]]; then
-      echo "BE edition don't allowed without ALLOW_BE=true"
-      exit 0
+    if [[ -n $MODULE_EDITION && ! " ${ALLOWED_EDITIONS[@]} " =~ " ${MODULE_EDITION} " ]]; then
+      echo "Edition '${MODULE_EDITION}' is not allowed"
+      exit 77
     fi
   # Setup tag
   - |
