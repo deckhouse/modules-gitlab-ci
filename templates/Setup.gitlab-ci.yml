@@ -142,6 +142,7 @@ before_script:
         fi
       fi
     fi
+  - echo "=== Setup completed ==="
 
 stages:
   - build
