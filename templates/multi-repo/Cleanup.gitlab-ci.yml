@@ -7,7 +7,8 @@ Scheduled cleanup:
   before_script:
     - !reference [.setup, before_script]
   script:
-    - werf managed-images ls
+    # TODO: this one not work properly for submodules (for now?)
+    # - werf managed-images ls
     - werf cleanup
 
 Auto cleanup:
