@@ -7,9 +7,17 @@ Scheduled cleanup:
   before_script:
     - !reference [.setup, before_script]
   script:
-    # TODO: this one not work properly for submodules (for now?)
-    # - werf managed-images ls
-    - werf cleanup
+    - |
+      if [[ -z "${NO_PRIVATE_REPO_PATCH}" ]]; then
+        echo "Apply git private repo patch... Set NO_PRIVATE_REPO_PATCH=1 to disable it"
+        export GOPRIVATE=${CI_SERVER_HOST}
+        git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "git@${CI_SERVER_HOST}:"
+      fi
+
+      echo "Managed images which will be preserved during cleanup procedure:"
+      werf managed-images ls
+      echo "Starting cleanup..."
+      werf cleanup
 
 Auto cleanup:
   stage: cleanup
@@ -29,6 +37,15 @@ Auto cleanup:
     - |
       if (( $(date +%s) % 10 == 0 )); then
         echo "✨ Run auto cleanup"
+
+        if [[ -z "${NO_PRIVATE_REPO_PATCH}" ]]; then
+          echo "Apply git private repo patch... Set NO_PRIVATE_REPO_PATCH=1 to disable it"
+          export GOPRIVATE=${CI_SERVER_HOST}
+          git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "git@${CI_SERVER_HOST}:"
+        fi
+
+        echo "Managed images which will be preserved during cleanup procedure:"
         werf managed-images ls
+        echo "Starting cleanup..."
         werf cleanup
       fi
