@@ -1,5 +1,6 @@
 Scheduled cleanup:
   stage: cleanup
+  timeout: 3h
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: on_success
