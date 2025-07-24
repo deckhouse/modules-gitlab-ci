@@ -103,6 +103,7 @@ stages:
       if [[ "x${MODULES_REGISTRY_PASSWORD}" == "x" ]]; then
         MODULES_REGISTRY_PASSWORD="${CI_REGISTRY_PASSWORD}"
       fi
+      echo "Logging in to registry ${MODULES_REGISTRY}..."
       werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
 
     # Setup dmt
