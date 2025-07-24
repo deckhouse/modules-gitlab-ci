@@ -217,9 +217,11 @@ variables:
           --form project=\"${project_name}\" \
           --form branch=\"${branch_name}\" \
           --form file=@\"${archive_name}\" \
-          --form options=\"--project-group ${PROJECT_GROUP}\" \
-          --form options=\"--if-no-group ${IF_NO_GROUP}\" \
-          --form options=\"--field COMMIT_HASH:${COMMIT_HASH}\""
+          --form options='{\"values\":[ \
+          {\"option\":\"project-group\",\"value\":\"${PROJECT_GROUP}\"}, \
+          {\"option\":\"if-no-group\",\"value\":\"${IF_NO_GROUP}\"}, \
+          {\"option\":\"field\",\"value\":\"CI_COMMIT_HASH:${CI_COMMIT_HASH}\"} \
+          ]}'"
 
           info "Importing \"${project_name}\"..."
           response=$(send_request "${svacer_import}" $request_attempts)
