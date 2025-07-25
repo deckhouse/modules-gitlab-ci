@@ -1,0 +1,59 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Setup.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Lint.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Build.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Deploy.gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/multi-repo/Cleanup.gitlab-ci.yml'
+  # deploy jobs for DEV registry
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/jobs/multi-repo/Deploy_DEV.gitlab-ci.yml'
+  # deploy jobs for PROD registry
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/jobs/multi-repo/Deploy_PROD.gitlab-ci.yml'
+    inputs:
+      # Editions used in your module. Array of following items:
+      # ce - Community edition
+      # ee - Enterprise edition
+      # fe - Flant edition (internal edition for Flant's engineers)
+      # se - Standard edition
+      # se-plus - Standard edition +
+      editions:
+        # All values must be in lowercase and quoted
+        - "ce"
+        - "ee"
+        - "fe"
+        - "se"
+        - "se-plus"
+
+variables:
+  # Do not forget to put these variables to your Gitlab CI secrets:
+  # They are REQUIRED and used for pulling/pushing images to the corresponding registry
+  # - DEV_MODULES_REGISTRY: DEV registry domain (like: registry.example.com)
+  # - DEV_MODULES_REGISTRY_PATH: path to modules repository in DEV registry (like: deckhouse/modules)
+  # - DEV_MODULES_REGISTRY_LOGIN: username to log in to DEV registry
+  # - DEV_MODULES_REGISTRY_PASSWORD: password to log in to DEV registry
+
+  # WARNING: If some of following variables are NOT SET, then there is NO production deployment jobs will be created in pipeline
+  # - PROD_MODULES_REGISTRY: PROD registry domain (like: registry.example.com)
+  # - PROD_MODULES_REGISTRY_PATH: path to modules repository in PROD registry (like: deckhouse/modules)
+  # - PROD_MODULES_REGISTRY_LOGIN: username to log in to PROD registry
+  # - PROD_MODULES_REGISTRY_PASSWORD: password to log in to PROD registry
+  WERF_VERSION: "2 stable"
+  BASE_IMAGES_VERSION: v0.2
+
+default:
+  tags:
+    - my-runner-tag
+
+
+###### LINT STAGE ######
+
+Lint:
+  extends: .lint
+
+###### END OF LINT STAGE ######
+
+###### BUILD STAGE ######
+
+Build:
+  extends: .build
+
+###### END OF BUILD STAGE ######
