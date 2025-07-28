@@ -12,9 +12,10 @@
 #   $SOURCE_REPO_SSH_KEY - SSH private key for the source repository
 #   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
 #   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
-#   SVACE_ANALYZE_SSH_PRIVATE_KEY- svace analyze server ssh private key
+#   SVACE_ANALYZE_SSH_PRIVATE_KEY - svace analyze server ssh private key
 #   MODULE_EDITION (Optional) - one of [ce,fe,be,se,se-plus], only needed to check ALLOW_BE for the basic edition.
 #   ALLOW_BE (Optional) - if MODULE_EDITION=be, must be set to "true" for the build/deploy.
+#   DECKHOUSE_LIB_HELM_VERSION - version of deckhouse lib-helm that will be downloaded
 
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
@@ -99,6 +100,13 @@ before_script:
     echo "=== Download base images yaml file ==="
     echo "BASE_IMAGES_VERSION: ${BASE_IMAGES_VERSION}"
     curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
+
+  # Download deckhouse lib-helm archive
+  - |
+    if [[ -n "${DECKHOUSE_LIB_HELM_VERSION}"  ]]; then
+      mkdir charts
+      curl --fail -sSLO https://github.com/deckhouse/lib-helm/releases/download/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}.tgz --output-dir ./charts
+    fi
 
   # Add ssh keys
   - |
