@@ -62,6 +62,7 @@ before_script:
   # Download deckhouse lib-helm archive
   - |
     if [[ -n "${DECKHOUSE_LIB_HELM_VERSION}"  ]]; then
+      mkdir charts
       curl --fail -sSLO https://github.com/deckhouse/lib-helm/releases/tag/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}.tgz --output-dir ./charts
     fi
 
