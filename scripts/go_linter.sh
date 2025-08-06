@@ -39,7 +39,7 @@ rm golangci-lint
 
 if [ $failed == 'true' ]; then
     echo "To apply fix run:
-git patch - <<EOF
+git apply - <<EOF
 $(git diff) 
 EOF"
     exit 1
