@@ -37,7 +37,7 @@ done
 
 rm golangci-lint
 
-if [[ -n "$(git status --porcelain)" ]]; then
+if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
     echo "To apply suggested changes run:
 git apply - <<EOF
 $(git diff) 
