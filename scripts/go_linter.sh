@@ -25,7 +25,7 @@ for i in $(find images -type f -name go.mod);do
     # check all editions
     for edition in $GO_BUILD_TAGS ;do
         echo "Running linter in $dir (edition: $edition)"
-        ../../golangci-lint run --allow-parallel-runners --build-tags $edition
+        ../../golangci-lint run --allow-parallel-runners --build-tags --fix $edition
         if [ $? -ne 0 ]; then
         echo "Linter failed in $dir (edition: $edition)"
         failed='true'
@@ -38,5 +38,9 @@ done
 rm golangci-lint
 
 if [ $failed == 'true' ]; then
+    echo "To apply fix run:
+git patch - <<EOF
+$(git diff) 
+EOF"
     exit 1
 fi
