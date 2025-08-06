@@ -42,5 +42,6 @@ if [ $failed == 'true' ]; then
 git apply - <<EOF
 $(git diff) 
 EOF"
+    git checkout -f
     exit 1
 fi
