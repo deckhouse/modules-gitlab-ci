@@ -38,10 +38,12 @@ done
 rm golangci-lint
 
 if [ $failed == 'true' ]; then
-    echo "To apply fix run:
+    if [[ -n "$(git status --porcelain)" ]]; then
+        echo "To apply suggested changes run:
 git apply - <<EOF
 $(git diff) 
 EOF"
-    git checkout -f
+        git checkout -f
+    fi
     exit 1
 fi
