@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-section_start () {
+function section_start () {
     local section_title="${1}"
     local section_description="${2:-$section_title}"
     
@@ -23,10 +23,9 @@ section_start () {
     else
         echo "$section_description"
     fi
-    
 }
 
-section_end () {
+function section_end () {
     local section_title="${1}"
     if [ "$GITLAB_CI" == "true" ]; then
         echo -e "section_end:`date +%s`:${section_title}\r\e[0K"
@@ -40,7 +39,7 @@ section_end "install_linter"
 basedir=$(pwd)
 failed='false'
 
-run_linters() {
+function run_linters() {
     local run_for="${1}"
     for i in $(find images -type f -name go.mod);do
         dir=$(echo $i | sed 's/go.mod$//')
