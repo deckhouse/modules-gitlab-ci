@@ -82,7 +82,7 @@ EOF"
 
 if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" ]; then
     git fetch origin ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
-    run_linters "modified files" "--new-from-rev=origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
+    run_linters "modified files" "--new-from-rev=FETCH_HEAD"
 fi
 
 run_linters "all files"
