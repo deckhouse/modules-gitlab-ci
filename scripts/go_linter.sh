@@ -14,12 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+unique_index=0
 section_start() {
     local section_title="${1}"
     local section_description="${2:-$section_title}"
     
+    unique_index=$((unique_index + 1))
     if [ "$GITLAB_CI" == "true" ]; then
-        echo -e "section_start:`date +%s`:${section_title}[collapsed=true]\r\e[0K${section_description}"
+        echo -e "section_start:`date +%s`:${section_title}_${unique_index}[collapsed=true]\r\e[0K${section_description}"
     else
         echo "$section_description"
     fi
@@ -28,7 +30,7 @@ section_start() {
 section_end() {
     local section_title="${1}"
     if [ "$GITLAB_CI" == "true" ]; then
-        echo -e "section_end:`date +%s`:${section_title}\r\e[0K"
+        echo -e "section_end:`date +%s`:${section_title}_${unique_index}\r\e[0K"
     fi
 }
 
@@ -61,12 +63,12 @@ run_linters() {
 
 
     if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-        section_start "print_patch_$run_for" "Linter suggested change"
+        section_start "print_patch" "Linter suggested change for $run_for"
         echo "To apply suggested changes run:
 git apply - <<EOF
 $(git diff)
 EOF"
-        section_end "print_patch_$run_for" 
+        section_end "print_patch" 
         git checkout -f
         failed='true'
     fi
