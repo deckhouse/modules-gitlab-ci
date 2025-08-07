@@ -80,8 +80,9 @@ EOF"
     fi
 }
 
-if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_SHA}" ]; then
-    run_linters "modified files" "--new-from-rev=${CI_MERGE_REQUEST_TARGET_BRANCH_SHA}"
+if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" ]; then
+    git fetch origin ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
+    run_linters "modified files" "--new-from-rev=${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
 fi
 
 run_linters "all files"
