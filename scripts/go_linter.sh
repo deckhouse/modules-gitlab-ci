@@ -44,6 +44,7 @@ failed='false'
 
 run_linters() {
     local run_for="${1}"
+    local extra_args="${2}"
     for i in $(find images -type f -name go.mod);do
         dir=$(echo $i | sed 's/go.mod$//')
         cd $basedir/$dir
@@ -79,11 +80,11 @@ EOF"
     fi
 }
 
-if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
-    NEW_FROM_REV_ARG="--new-from-rev $CI_MERGE_REQUEST_TARGET_BRANCH_NAME" run_linters "changed files"
+if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" ]; then
+    run_linters "modified files" "--new-from-rev ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
 fi
 
-NEW_FROM_REV_ARG="" run_linters "all files"
+run_linters "all files"
 
 rm golangci-lint
 
