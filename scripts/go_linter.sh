@@ -51,7 +51,7 @@ run_linters() {
         # check all editions
         for edition in $GO_BUILD_TAGS ;do
             section_start "run_lint" "Running linter in $dir (edition: $edition) for $run_for"
-            ../../golangci-lint run ${NEW_FROM_REV_ARG} --fix --color=always --allow-parallel-runners --build-tags $edition
+            ../../golangci-lint run ${extra_args} --fix --color=always --allow-parallel-runners --build-tags $edition
             local linter_status=$?
             section_end "run_lint"
             if [ $linter_status -ne 0 ]; then
@@ -81,7 +81,7 @@ EOF"
 }
 
 if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" ]; then
-    run_linters "modified files" "--new-from-rev ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
+    run_linters "modified files" "--new-from-rev=${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
 fi
 
 run_linters "all files"
