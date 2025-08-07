@@ -19,8 +19,8 @@ section_start() {
     local section_title="${1}"
     local section_description="${2:-$section_title}"
     
-    unique_index=$((unique_index + 1))
     if [ "$GITLAB_CI" == "true" ]; then
+        unique_index=$((unique_index + 1))
         echo -e "section_start:`date +%s`:${section_title}_${unique_index}[collapsed=true]\r\e[0K${section_description}"
     else
         echo "$section_description"
@@ -49,9 +49,9 @@ run_linters() {
         cd $basedir/$dir
         # check all editions
         for edition in $GO_BUILD_TAGS ;do
-            section_start "run_lint_$dir_$edition_$run_for" "Running linter in $dir (edition: $edition) for $run_for"
+            section_start "run_lint" "Running linter in $dir (edition: $edition) for $run_for"
             ../../golangci-lint run ${NEW_FROM_REV_ARG} --fix --color=always --allow-parallel-runners --build-tags $edition
-            section_end "run_lint_$dir_$edition_$run_for"
+            section_end "run_lint"
             if [ $? -ne 0 ]; then
                 echo "Linter failed in $dir (edition: $edition) for $run_for"
                 failed='true'
@@ -64,8 +64,7 @@ run_linters() {
 
     if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
         section_start "print_patch" "Linter suggested change for $run_for"
-        echo "To apply suggested changes run:
-git apply - <<EOF
+        echo "git apply - <<EOF
 $(git diff)
 EOF"
         section_end "print_patch" 
@@ -79,7 +78,6 @@ run_linters "all files"
 
 if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
     NEW_FROM_REV_ARG="--new-from-rev $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-    echo -e "\e[0;32mRunning linters for changes from revision $CI_MERGE_REQUEST_TARGET_BRANCH_NAME\e[0m"
     run_linters "changes from $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
 fi
 
