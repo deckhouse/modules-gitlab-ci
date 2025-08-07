@@ -80,12 +80,10 @@ EOF"
 }
 
 if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
-    NEW_FROM_REV_ARG="--new-from-rev $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-    run_linters "changed files"
+    NEW_FROM_REV_ARG="--new-from-rev $CI_MERGE_REQUEST_TARGET_BRANCH_NAME" run_linters "changed files"
 fi
 
-NEW_FROM_REV_ARG=""
-run_linters "all files"
+NEW_FROM_REV_ARG="" run_linters "all files"
 
 rm golangci-lint
 
