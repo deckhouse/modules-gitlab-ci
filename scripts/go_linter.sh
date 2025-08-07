@@ -53,8 +53,10 @@ run_linters() {
             ../../golangci-lint run ${NEW_FROM_REV_ARG} --fix --color=always --allow-parallel-runners --build-tags $edition
             section_end "run_lint"
             if [ $? -ne 0 ]; then
-                echo "Linter failed in $dir (edition: $edition) for $run_for"
+                echo "\e[31mLinter FAILED in $dir (edition: $edition) for $run_for\e[0m"
                 failed='true'
+            else 
+                echo "\e[32mLinter PASSED in $dir (edition: $edition) for $run_for\e[0m"
             fi
         done
 
@@ -69,7 +71,10 @@ $(git diff)
 EOF"
         section_end "print_patch" 
         git checkout -f
+        echo -e "\e[31mLinter requests changes for $run_for\e[0m"
         failed='true'
+    else
+        echo -e "\e[32mLinter doesn't have changes requested for $run_for\e[0m"
     fi
 }
 
