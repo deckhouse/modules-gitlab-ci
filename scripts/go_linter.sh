@@ -25,7 +25,7 @@ for i in $(find images -type f -name go.mod);do
     # check all editions
     for edition in $GO_BUILD_TAGS ;do
         echo "Running linter in $dir (edition: $edition)"
-        ../../golangci-lint run --allow-parallel-runners --build-tags $edition
+        ../../golangci-lint run --fix --allow-parallel-runners --build-tags $edition
         if [ $? -ne 0 ]; then
         echo "Linter failed in $dir (edition: $edition)"
         failed='true'
@@ -36,6 +36,15 @@ for i in $(find images -type f -name go.mod);do
 done
 
 rm golangci-lint
+
+if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+    echo "To apply suggested changes run:
+git apply - <<EOF
+$(git diff)
+EOF"
+    git checkout -f
+    failed='true'
+fi
 
 if [ $failed == 'true' ]; then
     exit 1
