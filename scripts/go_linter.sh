@@ -25,7 +25,7 @@ for i in $(find images -type f -name go.mod);do
     # check all editions
     for edition in $GO_BUILD_TAGS ;do
         echo "Running linter in $dir (edition: $edition)"
-        ../../golangci-lint run --fix --allow-parallel-runners --build-tags $edition
+        ../../golangci-lint run --fix --allow-parallel-runners --build-tags $edition ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:+--new-from-rev \"$CI_MERGE_REQUEST_TARGET_BRANCH_NAME\"}"
         if [ $? -ne 0 ]; then
         echo "Linter failed in $dir (edition: $edition)"
         failed='true'
