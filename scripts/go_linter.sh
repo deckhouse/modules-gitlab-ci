@@ -19,39 +19,45 @@ curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/insta
 basedir=$(pwd)
 failed='false'
 
-NEW_FROM_REV_ARG=""
-if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
-    NEW_FROM_REV_ARG="--new-from-rev $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-    echo "Changes from revision $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-fi
+run_linters() {
+    for i in $(find images -type f -name go.mod);do
+        dir=$(echo $i | sed 's/go.mod$//')
+        cd $basedir/$dir
+        # check all editions
+        for edition in $GO_BUILD_TAGS ;do
+            echo "Running linter in $dir (edition: $edition)"
+            ../../golangci-lint run ${NEW_FROM_REV_ARG} --fix --allow-parallel-runners --build-tags $edition
+            if [ $? -ne 0 ]; then
+            echo "Linter failed in $dir (edition: $edition)"
+            failed='true'
+            fi
+        done
 
-
-for i in $(find images -type f -name go.mod);do
-    dir=$(echo $i | sed 's/go.mod$//')
-    cd $basedir/$dir
-    # check all editions
-    for edition in $GO_BUILD_TAGS ;do
-        echo "Running linter in $dir (edition: $edition)"
-        ../../golangci-lint run ${NEW_FROM_REV_ARG} --fix --allow-parallel-runners --build-tags $edition
-        if [ $? -ne 0 ]; then
-        echo "Linter failed in $dir (edition: $edition)"
-        failed='true'
-        fi
+        cd - > /dev/null
     done
 
-    cd - > /dev/null
-done
+
+    if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+        echo "To apply suggested changes run:
+    git apply - <<EOF
+    $(git diff)
+    EOF"
+        git checkout -f
+        failed='true'
+    fi
+}
+
+echo "Running linters for all files"
+NEW_FROM_REV_ARG=""
+run_linters
+
+if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+    NEW_FROM_REV_ARG="--new-from-rev $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    echo "Running linters for changes from revision $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    run_linters
+fi
 
 rm golangci-lint
-
-if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-    echo "To apply suggested changes run:
-git apply - <<EOF
-$(git diff)
-EOF"
-    git checkout -f
-    failed='true'
-fi
 
 if [ $failed == 'true' ]; then
     exit 1
