@@ -55,7 +55,7 @@ run_linters() {
             if [ $? -ne 0 ]; then
                 echo -e "\e[31mLinter FAILED in $dir (edition: $edition) for $run_for\e[0m"
                 failed='true'
-            else 
+            else
                 echo -e "\e[32mLinter PASSED in $dir (edition: $edition) for $run_for\e[0m"
             fi
         done
