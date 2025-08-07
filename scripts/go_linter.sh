@@ -65,13 +65,13 @@ run_linters() {
 
 
     if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-        section_start "print_patch" "Linter suggested change for $run_for"
+        echo -e "\e[31mLinter requests changes for $run_for\e[0m"
+        section_start "print_patch" "To apply these changes run"
         echo "git apply - <<EOF
 $(git diff)
 EOF"
         section_end "print_patch" 
         git checkout -f
-        echo -e "\e[31mLinter requests changes for $run_for\e[0m"
         failed='true'
     else
         echo -e "\e[32mLinter doesn't have changes requested for $run_for\e[0m"
