@@ -81,8 +81,10 @@ EOF"
 }
 
 if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" ]; then
-    git fetch origin ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
-    run_linters "modified files" "--new-from-rev=FETCH_HEAD"
+    echo "${CI_MERGE_REQUEST_DIFF_BASE_SHA}" >> .git/shallow
+    git fetch -n origin ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
+    git fetch --no-tags origin ${CI_COMMIT_SHA}
+    run_linters "modified files" "--new-from-rev=${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
 fi
 
 run_linters "all files"
