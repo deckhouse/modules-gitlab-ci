@@ -47,9 +47,9 @@ run_linters() {
         cd $basedir/$dir
         # check all editions
         for edition in $GO_BUILD_TAGS ;do
-            section_start "run_lint" "Running linter in $dir (edition: $edition) for $run_for"
+            section_start "run_lint_$dir_$edition_$run_for" "Running linter in $dir (edition: $edition) for $run_for"
             ../../golangci-lint run ${NEW_FROM_REV_ARG} --fix --color=always --allow-parallel-runners --build-tags $edition
-            section_end "run_lint"
+            section_end "run_lint_$dir_$edition_$run_for"
             if [ $? -ne 0 ]; then
                 echo "Linter failed in $dir (edition: $edition) for $run_for"
                 failed='true'
@@ -61,12 +61,12 @@ run_linters() {
 
 
     if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-        section_start "print_patch" "Linter suggested change"
+        section_start "print_patch_$run_for" "Linter suggested change"
         echo "To apply suggested changes run:
 git apply - <<EOF
 $(git diff)
 EOF"
-        section_end "print_patch" 
+        section_end "print_patch_$run_for" 
         git checkout -f
         failed='true'
     fi
