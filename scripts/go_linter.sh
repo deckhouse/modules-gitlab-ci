@@ -80,7 +80,7 @@ EOF"
     fi
 }
 
-if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" ]; then
+if [ -n "${CI_MERGE_REQUEST_DIFF_BASE_SHA}" ]; then
     run_linters "modified files" "--new-from-merge-base=${CI_MERGE_REQUEST_DIFF_BASE_SHA}"
 fi
 
