@@ -47,13 +47,13 @@ run_linters() {
     fi
 }
 
-echo "Running linters for all files"
+echo -e "\e[0;32mRunning linters for all files\e[0m"
 NEW_FROM_REV_ARG=""
 run_linters
 
 if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
     NEW_FROM_REV_ARG="--new-from-rev $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-    echo "Running linters for changes from revision $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    echo -e "\e[0;32mRunning linters for changes from revision $CI_MERGE_REQUEST_TARGET_BRANCH_NAME\e[0m"
     run_linters
 fi
 
