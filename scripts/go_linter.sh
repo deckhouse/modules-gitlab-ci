@@ -51,8 +51,9 @@ run_linters() {
         for edition in $GO_BUILD_TAGS ;do
             section_start "run_lint" "Running linter in $dir (edition: $edition) for $run_for"
             ../../golangci-lint run ${NEW_FROM_REV_ARG} --fix --color=always --allow-parallel-runners --build-tags $edition
+            err=$?
             section_end "run_lint"
-            if [ $? -ne 0 ]; then
+            if [ $err -ne 0 ]; then
                 echo -e "\e[31mLinter FAILED in $dir (edition: $edition) for $run_for\e[0m"
                 failed='true'
             else
