@@ -30,10 +30,7 @@ section_end () {
     local section_title="${1}"
     if [ "$GITLAB_CI" == "true" ]; then
         echo -e "section_end:`date +%s`:${section_title}\r\e[0K"
-    else
-        # echo "$section_description"
     fi
-  
 }
 
 section_start "install_linter" "Installing linter"
