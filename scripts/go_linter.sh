@@ -19,13 +19,20 @@ curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/insta
 basedir=$(pwd)
 failed='false'
 
+NEW_FROM_REV_ARG=""
+if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+    NEW_FROM_REV_ARG="--new-from-rev $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    echo "Changes from revision $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+fi
+
+
 for i in $(find images -type f -name go.mod);do
     dir=$(echo $i | sed 's/go.mod$//')
     cd $basedir/$dir
     # check all editions
     for edition in $GO_BUILD_TAGS ;do
         echo "Running linter in $dir (edition: $edition)"
-        ../../golangci-lint run --fix --allow-parallel-runners --build-tags $edition ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:+--new-from-rev \"$CI_MERGE_REQUEST_TARGET_BRANCH_NAME\"}
+        ../../golangci-lint run ${NEW_FROM_REV_ARG} --fix --allow-parallel-runners --build-tags $edition
         if [ $? -ne 0 ]; then
         echo "Linter failed in $dir (edition: $edition)"
         failed='true'
