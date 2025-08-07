@@ -17,7 +17,7 @@
 unique_index=0
 section_start() {
     local section_title="${1}"
-    local section_description="${2:-$section_title}"
+    local section_description="${2}"
     
     if [ "$GITLAB_CI" == "true" ]; then
         unique_index=$((unique_index + 1))
