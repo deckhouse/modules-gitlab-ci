@@ -51,9 +51,9 @@ run_linters() {
         for edition in $GO_BUILD_TAGS ;do
             section_start "run_lint" "Running linter in $dir (edition: $edition) for $run_for"
             ../../golangci-lint run ${NEW_FROM_REV_ARG} --fix --color=always --allow-parallel-runners --build-tags $edition
-            err=$?
+            local linter_status=$?
             section_end "run_lint"
-            if [ $err -ne 0 ]; then
+            if [ $linter_status -ne 0 ]; then
                 echo -e "\e[31mLinter FAILED in $dir (edition: $edition) for $run_for\e[0m"
                 failed='true'
             else
@@ -79,13 +79,13 @@ EOF"
     fi
 }
 
-NEW_FROM_REV_ARG=""
-run_linters "all files"
-
 if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
     NEW_FROM_REV_ARG="--new-from-rev $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
     run_linters "changed files"
 fi
+
+NEW_FROM_REV_ARG=""
+run_linters "all files"
 
 rm golangci-lint
 
