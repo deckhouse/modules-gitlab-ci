@@ -80,8 +80,8 @@ EOF"
     fi
 }
 
-if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" ]; then
-    run_linters "modified files" "--new-from-rev=${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
+if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_SHA}" ]; then
+    run_linters "modified files" "--new-from-rev=${CI_MERGE_REQUEST_TARGET_BRANCH_SHA}"
 fi
 
 run_linters "all files"
