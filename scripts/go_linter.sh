@@ -26,7 +26,7 @@ run_linters() {
         # check all editions
         for edition in $GO_BUILD_TAGS ;do
             echo "Running linter in $dir (edition: $edition)"
-            ../../golangci-lint run ${NEW_FROM_REV_ARG} --fix --allow-parallel-runners --build-tags $edition
+            ../../golangci-lint run ${NEW_FROM_REV_ARG} --fix --color=always --allow-parallel-runners --build-tags $edition
             if [ $? -ne 0 ]; then
             echo "Linter failed in $dir (edition: $edition)"
             failed='true'
