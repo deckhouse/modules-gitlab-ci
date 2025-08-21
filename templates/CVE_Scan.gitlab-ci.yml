@@ -220,8 +220,8 @@
           fi
           echo "    Done"
 
-            send_report "CVE" "${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report.json"
-            send_report "License" "${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report_license.json"
+          send_report "CVE" "${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report.json"
+          send_report "License" "${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report_license.json"
         done < <(jq -rc 'to_entries[]' <<< "${digests}")
       done
       rm -rf ${workdir}
