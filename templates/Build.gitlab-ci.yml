@@ -43,7 +43,7 @@ variables:
   script:
     # Bundle image
     - |
-      # Проверяем наличие ключей подписи
+      # Check if signing keys are present
       if [[ "${WERF_SIGN_MANIFEST}" == "true" ]]; then
         if [[ -n "${WERF_SIGN_CERT}" && -n "${WERF_SIGN_KEY}" ]]; then
           echo "✅ Image signing is enabled and configured"

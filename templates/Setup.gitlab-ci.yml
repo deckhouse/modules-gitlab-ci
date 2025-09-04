@@ -38,7 +38,7 @@ variables:
   MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
   BASE_IMAGES_VERSION: v0.5.7
   WERF_REPO: ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
-  WERF_VERSION: "2.47.5+dk"
+  WERF_VERSION: "v2.47.5+dk"
   WERF_SIGN_MANIFEST: "true"
   WERF_BSIGN_ELF_FILES: "1"
   WERF_ANNOTATE_LAYERS_WITH_DM_VERITY_ROOT_HASH: "true"
@@ -59,10 +59,10 @@ before_script:
     chmod +x ~/bin/werf
     export PATH=~/bin:$PATH
     
-    # Проверяем версию werf
+    # Check werf version
     werf version
     
-    # Настраиваем CI окружение для werf
+    # Setup CI environment for werf
     source $(werf ci-env gitlab --as-file)
 
     # Login to gitlab registry by default
@@ -81,7 +81,7 @@ before_script:
   - |
     echo "🔐 Checking required signing variables..."
     
-    # Переменные, которые должны быть установлены в секретах CI/CD
+    # Variables that must be set in secrets CI/CD
     REQUIRED_SIGNING_VARS=(
       "WERF_SIGN_CERT"
       "WERF_SIGN_INTERMEDIATES"
@@ -93,7 +93,7 @@ before_script:
       "WERF_ELF_PGP_PRIVATE_KEY_PASSPHRASE"
     )
     
-    # Проверяем секретные переменные
+    # Check secret variables
     for var in "${REQUIRED_SIGNING_VARS[@]}"; do
       if [[ -z "${!var}" ]]; then
         echo "❌ ERROR: Required secret variable $var is not set!"
