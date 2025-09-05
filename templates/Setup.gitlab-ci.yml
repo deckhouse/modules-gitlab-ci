@@ -32,6 +32,7 @@
 #   WERF_ANNOTATE_LAYERS_WITH_DM_VERITY_ROOT_HASH = true - add dm-verity hashes to layers
 
 #   The GPG key is located locally on the Gitlab runner
+#   Werf must be installed manually
 
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
@@ -52,13 +53,7 @@ before_script:
     rm trdl
     export PATH=$PATH:~/bin
 
-  # Setup werf
   - |
-    echo "🔧 Downloading werf binary with signing support from internal repository..."
-    curl --fail -sSL -o ~/bin/werf --header "JOB-TOKEN: $CI_JOB_TOKEN" "https://fox.flant.com/api/v4/projects/4052/packages/generic/werf/${WERF_VERSION}/werf"
-    chmod +x ~/bin/werf
-    export PATH=~/bin:$PATH
-    
     # Check werf version
     werf version
     
