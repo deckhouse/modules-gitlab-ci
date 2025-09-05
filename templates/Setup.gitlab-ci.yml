@@ -55,7 +55,7 @@ before_script:
   # Setup werf
   - |
     echo "🔧 Downloading werf binary with signing support from internal repository..."
-    curl --fail -sSL -o ~/bin/werf "https://fox.flant.com/api/v4/projects/4052/packages/generic/werf/${WERF_VERSION}/werf" --user "gitlab-ci-token:${CI_JOB_TOKEN}"
+    curl --fail -sSL -o ~/bin/werf --header "JOB-TOKEN: $CI_JOB_TOKEN" "https://fox.flant.com/api/v4/projects/4052/packages/generic/werf/${WERF_VERSION}/werf"
     chmod +x ~/bin/werf
     export PATH=~/bin:$PATH
     
