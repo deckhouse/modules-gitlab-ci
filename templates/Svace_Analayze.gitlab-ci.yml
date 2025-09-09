@@ -51,8 +51,6 @@ variables:
           echo "Using new ssh auth sock: ${SSH_AUTH_SOCK}"
       fi
 
-      echo "Svace analyze key: ${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
-
       echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" | base64 -d | ssh-add -
 
     # Add Svace analyze host to known_hosts
