@@ -58,10 +58,11 @@ before_script:
     export PATH=$PATH:~/bin
   # Setup werf
   - |
-    echo "🔧 Downloading werf binary with signing support from internal repository..."
+    echo "🔧 Downloading werf $WERF_VERSION binary with signing support from internal repository..."
     curl --fail -sSL -o ~/bin/werf \
     -H "PRIVATE-TOKEN: $PACKAGE_TOKEN" \
     "https://fox.flant.com/api/v4/projects/4052/packages/generic/werf/${WERF_VERSION}/werf"
+    type ~/bin/werf
     chmod +x ~/bin/werf
     export PATH=$PATH:~/bin
 
