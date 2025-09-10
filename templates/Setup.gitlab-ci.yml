@@ -30,6 +30,7 @@
 #   WERF_BSIGN_ELF_FILES=1 - enable binary signing
 #   WERF_SIGN_MANIFEST: "true" - enable image signing
 #   WERF_ANNOTATE_LAYERS_WITH_DM_VERITY_ROOT_HASH = true - add dm-verity hashes to layers
+#   WERF_SIGN_ELF_FILES: "1" - enable elf signing
 
 #   The GPG key is located locally on the Gitlab runner
 #   Werf must be installed manually
@@ -40,9 +41,10 @@ variables:
   BASE_IMAGES_VERSION: v0.5.7
   WERF_REPO: ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
   WERF_VERSION: "v2.47.5+dk"
-  WERF_SIGN_MANIFEST: "true"
+  WERF_SIGN_MANIFEST: "1"
+  WERF_SIGN_ELF_FILES: "1"
   WERF_BSIGN_ELF_FILES: "1"
-  WERF_ANNOTATE_LAYERS_WITH_DM_VERITY_ROOT_HASH: "true"
+  WERF_ANNOTATE_LAYERS_WITH_DM_VERITY_ROOT_HASH: "1"
 
 before_script:
   # Setup trdl
