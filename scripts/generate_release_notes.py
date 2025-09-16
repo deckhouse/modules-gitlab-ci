@@ -168,6 +168,11 @@ def main():
     
     print(f"Found {len(en_files)} English files and {len(ru_files)} Russian files")
     
+    # Check that number of .ru.yml and .yml files match
+    if len(en_files) != len(ru_files):
+        print(f"Error: Number of English files ({len(en_files)}) does not match number of Russian files ({len(ru_files)})")
+        return 1
+    
     # Remove existing files
     remove_existing_files(str(output_dir))
     
