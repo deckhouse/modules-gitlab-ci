@@ -4,7 +4,7 @@
 #   $WERF_REPO - registry path, default ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
 #   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
 #   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
-#   SVACE_ANALYZE_SSH_PRIVATE_KEY- svace analyze server ssh private key
+#   SVACE_ANALYZE_SSH_PRIVATE_KEY_B64- svace analyze server ssh private key
 
 variables:
   WERF_REPO:
