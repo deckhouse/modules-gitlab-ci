@@ -13,7 +13,7 @@
 #   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
 #   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
 #   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
-#   SVACE_ANALYZE_SSH_PRIVATE_KEY - svace analyze server ssh private key
+#   SVACE_ANALYZE_SSH_PRIVATE_KEY_B64 - svace analyze server ssh private key
 #   DECKHOUSE_LIB_HELM_VERSION - version of deckhouse lib-helm that will be downloaded
 
 variables:
@@ -68,7 +68,7 @@ before_script:
 
   # Add ssh keys
   - |
-    if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
+    if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
 
       eval $(ssh-agent)
       trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
@@ -90,8 +90,8 @@ before_script:
         fi
       fi
 
-      if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
-        echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" | base64 -d | ssh-add -
+      if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
+        echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d | ssh-add -
         if [[ -n "${SVACE_ANALYZE_HOST}" ]]; then
           echo "Adding svace ssh key (ignoring errors)."
           set +e

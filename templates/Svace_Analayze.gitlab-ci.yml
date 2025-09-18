@@ -1,10 +1,4 @@
 variables:
-  SVACE_ENABLED:
-    description: "Enable Svace analysis"
-    value: "false"
-    options:
-      - "true"
-      - "false"
 #   SVACER_URL:
 #     description: "url to svacer server"
 #     value: "${SVACER_URL}"
@@ -32,7 +26,7 @@ variables:
     COMMIT_HASH: ${CI_COMMIT_SHA}
     SVACE_ANALYZE_HOST: "${SVACE_ANALYZE_HOST}"
     SVACE_ANALYZE_SSH_USER: "${SVACE_ANALYZE_SSH_USER}"
-    SVACE_ANALYZE_SSH_PRIVATE_KEY: "${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
+    SVACE_ANALYZE_SSH_PRIVATE_KEY_B64: "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}"
     SVACE_ANALYZE_DIR: "svace-analyze"
     SVACER_URL: "${SVACER_URL}"
     SVACER_IMPORT_USER: "${SVACER_IMPORT_USER}"
@@ -51,7 +45,7 @@ variables:
           echo "Using new ssh auth sock: ${SSH_AUTH_SOCK}"
       fi
 
-      echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" | base64 -d | ssh-add -
+      echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d | ssh-add -
 
     # Add Svace analyze host to known_hosts
     - |
