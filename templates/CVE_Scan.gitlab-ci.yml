@@ -76,6 +76,9 @@
       # prepare TAG if it was triggered with CI_COMMIT_TAG
       if [ -n "${CI_COMMIT_TAG}" ]; then
         TAG=$(echo "${TAG}"| sed 's/^v//' | cut -d '.' -f -2)
+      else
+        # if not - replace / with -
+        TAG=$(echo "${TAG}"| sed -e 's/\//-/g')
       fi
       module_tags=("${TAG}")
 
