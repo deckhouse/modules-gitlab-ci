@@ -95,6 +95,10 @@
   stage: deploy
   script:
   - |
+    # set defaults for target registry variables from source registry variables
+    export MODULES_TARGET_REGISTRY="${MODULES_TARGET_REGISTRY:-$MODULES_REGISTRY}"
+    export MODULES_TARGET_REGISTRY_PATH="${MODULES_TARGET_REGISTRY_PATH:-$MODULES_REGISTRY_PATH}"
+
     REPO="${MODULES_TARGET_REGISTRY}/${MODULES_TARGET_REGISTRY_PATH}/${MODULES_MODULE_NAME}/release"
 
     IMAGE_SRC="${REPO}:${MODULES_MODULE_TAG}"
