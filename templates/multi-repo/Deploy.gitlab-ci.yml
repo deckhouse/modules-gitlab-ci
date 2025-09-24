@@ -2,18 +2,32 @@
   stage: deploy
   script:
     - |
-      # Login to Gitlab (source) registry if target registry is not same Gitlab
-      if [[ "x${MODULES_REGISTRY}" != "x${CI_REGISTRY}" ]]; then
-        echo "Login to Gitlab (source) ${CI_REGISTRY}..."
+      if [[ "x${MODULES_REGISTRY}" == "x" || "x${MODULES_REGISTRY_LOGIN}" == "x" || "x${MODULES_REGISTRY_PASSWORD}" == "x" || "x${MODULES_REGISTRY_PATH}" == "x" ]]; then
+        echo "One or more required variables of source registry is empty: MODULES_REGISTRY, MODULES_REGISTRY_LOGIN, MODULES_REGISTRY_PASSWORD, MODULES_REGISTRY_PATH"
+        exit 5
+      fi
+
+      if [[ "x${MODULES_TARGET_REGISTRY}" == "x" || "x${MODULES_TARGET_REGISTRY_LOGIN}" == "x" || "x${MODULES_TARGET_REGISTRY_PASSWORD}" == "x" || "x${MODULES_TARGET_REGISTRY_PATH}" == "x" ]]; then
+        echo "One or more required variables of target registry is empty: MODULES_TARGET_REGISTRY, MODULES_TARGET_REGISTRY_LOGIN, MODULES_TARGET_REGISTRY_PASSWORD, MODULES_TARGET_REGISTRY_PATH"
+        exit 5
+      fi
+    - |
+      # Login to Gitlab registry just in case
+      if [[ "x${MODULES_REGISTRY}" != "x${CI_REGISTRY}" && "x${CI_REGISTRY}" != "x" && "x${CI_REGISTRY_USER}" != "x" && "x${CI_REGISTRY_PASSWORD}" != "x" ]]; then
+        echo "Login to Gitlab ${CI_REGISTRY} just in case..."
         werf cr login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
       fi
 
-      # Login to target registry
-      echo "Login to target registry ${MODULES_REGISTRY}..."
+      # Login to source registry
+      echo "Login to source registry ${MODULES_REGISTRY}..."
       werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
-    # generate MODULES_MODULE_SOURCE
+
+      # Login to target registry
+      echo "Login to target registry ${MODULES_TARGET_REGISTRY}..."
+      werf cr login -u ${MODULES_TARGET_REGISTRY_LOGIN} -p ${MODULES_TARGET_REGISTRY_PASSWORD} ${MODULES_TARGET_REGISTRY}
+    # generate MODULES_MODULE_TARGET
     - |
-      export MODULES_MODULE_SOURCE="${MODULES_REGISTRY}/${MODULES_REGISTRY_PATH}"
+      export MODULES_MODULE_TARGET="${MODULES_TARGET_REGISTRY}/${MODULES_TARGET_REGISTRY_PATH}"
 
     # Module images
     - |
@@ -31,45 +45,65 @@
         # docker_tag: ed0388a743d61926309d1023e02c639c1006f7b7b56d78161f32b0e0-1744971955188
 
         IMAGE_SRC="${docker_image}"
-        IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}:${docker_tag}"
+        IMAGE_DST="${MODULES_MODULE_TARGET}/${MODULES_MODULE_NAME}:${docker_tag}"
 
-        echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
-        crane copy ${IMAGE_SRC} ${IMAGE_DST}
+        if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
+          echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+          crane copy ${IMAGE_SRC} ${IMAGE_DST}
+        else
+          echo "[DEBUG_CI_DRY_RUN] ✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+        fi
       done
 
     # Bundle image
     - |
       IMAGE_SRC="$(jq -r '.Images."bundle".DockerImageName' images_tags_werf.json)"
-      IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}:${MODULES_MODULE_TAG}"
+      IMAGE_DST="${MODULES_MODULE_TARGET}/${MODULES_MODULE_NAME}:${MODULES_MODULE_TAG}"
 
-      echo "✨ Pushing BUNDLE ${IMAGE_SRC} to ${IMAGE_DST}"
-      crane copy ${IMAGE_SRC} ${IMAGE_DST}
+      if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
+        echo "✨ Pushing BUNDLE ${IMAGE_SRC} to ${IMAGE_DST}"
+        crane copy ${IMAGE_SRC} ${IMAGE_DST}
+      else
+        echo "[DEBUG_CI_DRY_RUN] ✨ Pushing BUNDLE ${IMAGE_SRC} to ${IMAGE_DST}"
+      fi
     # Release-channel image
     - |
       IMAGE_SRC="$(jq -r '.Images."release-channel-version".DockerImageName' images_tags_werf.json)"
-      IMAGE_DST="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}/release:${MODULES_MODULE_TAG}"
+      IMAGE_DST="${MODULES_MODULE_TARGET}/${MODULES_MODULE_NAME}/release:${MODULES_MODULE_TAG}"
 
-      echo "✨ Pushing RELEASE ${IMAGE_SRC} to ${IMAGE_DST}"
-      crane copy ${IMAGE_SRC} ${IMAGE_DST}
+      if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
+        echo "✨ Pushing RELEASE ${IMAGE_SRC} to ${IMAGE_DST}"
+        crane copy ${IMAGE_SRC} ${IMAGE_DST}
+      else
+        echo "[DEBUG_CI_DRY_RUN] ✨ Pushing RELEASE ${IMAGE_SRC} to ${IMAGE_DST}"
+      fi
     # Register module
     - |
-      echo "✨ Register the module ${MODULES_MODULE_NAME}"
-      crane append \
-        --oci-empty-base \
-        --new_layer "" \
-        --new_tag "${MODULES_MODULE_SOURCE}:${MODULES_MODULE_NAME}"
+      if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
+        echo "✨ Register the module ${MODULES_MODULE_NAME} in ${MODULES_MODULE_TARGET} registry"
+        crane append \
+          --oci-empty-base \
+          --new_layer "" \
+          --new_tag "${MODULES_MODULE_TARGET}:${MODULES_MODULE_NAME}"
+      else
+        echo "[DEBUG_CI_DRY_RUN] ✨ Register the module ${MODULES_MODULE_NAME} in ${MODULES_MODULE_TARGET} registry"
+      fi
 
 .deploy:
   stage: deploy
   script:
   - |
-    REPO="${MODULES_REGISTRY}/${MODULES_REGISTRY_PATH}/${MODULES_MODULE_NAME}/release"
+    REPO="${MODULES_TARGET_REGISTRY}/${MODULES_TARGET_REGISTRY_PATH}/${MODULES_MODULE_NAME}/release"
 
     IMAGE_SRC="${REPO}:${MODULES_MODULE_TAG}"
     IMAGE_DST="${REPO}:${RELEASE_CHANNEL}"
 
-    echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
-    crane copy "${IMAGE_SRC}" "${IMAGE_DST}"
+    if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
+      echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+      crane copy "${IMAGE_SRC}" "${IMAGE_DST}"
+    else
+      echo "[DEBUG_CI_DRY_RUN] ✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+    fi
 
 .deploy_prod_rules:
   rules:
@@ -88,11 +122,11 @@
   rules:
     - !reference [.deploy_prod_rules, rules]
   variables:
-    MODULES_REGISTRY: $PROD_MODULES_REGISTRY
-    MODULES_REGISTRY_LOGIN: $PROD_MODULES_REGISTRY_LOGIN
-    MODULES_REGISTRY_PASSWORD: $PROD_MODULES_REGISTRY_PASSWORD
+    MODULES_TARGET_REGISTRY: $PROD_MODULES_REGISTRY
+    MODULES_TARGET_REGISTRY_LOGIN: $PROD_MODULES_REGISTRY_LOGIN
+    MODULES_TARGET_REGISTRY_PASSWORD: $PROD_MODULES_REGISTRY_PASSWORD
     # path in PROD registry must be hardcoded
-    MODULES_REGISTRY_PATH: deckhouse/${EDITION}/modules
+    MODULES_TARGET_REGISTRY_PATH: deckhouse/${EDITION}/modules
   script:
     - |
       if [ "$DEBUG_CI" = "true" -o "$DEBUG_CI" = "1" ]; then
