@@ -19,13 +19,13 @@ from bs4 import BeautifulSoup
 
 def normalize_channel(channel: str) -> str:
     """
-    Преобразует канал в правильный регистр.
+    Converts channel to proper case.
     
     Args:
-        channel (str): Исходный канал
+        channel (str): Source channel
         
     Returns:
-        str: Канал в правильном регистре
+        str: Channel in proper case
     """
     channel_mapping = {
         'alpha': 'Alpha',
@@ -40,38 +40,38 @@ def normalize_channel(channel: str) -> str:
 
 def send_post_request(url, channel, text):
     """
-    Отправка POST-запроса с JSON телом, содержащим channel и text
+    Sends POST request with JSON body containing channel and text
     
     Args:
-        url (str): URL для запроса
-        channel (str): Значение для поля channel
-        text (str): Текст сообщения, в котором экранируются специальные символы
+        url (str): URL for the request
+        channel (str): Value for the channel field
+        text (str): Message text with escaped special characters
     
     Returns:
-        dict: Ответ от сервера в формате JSON или None при ошибке
+        dict: Server response in JSON format or None on error
     """   
-    # Формируем тело запроса
+    # Form request body
     payload = {
         "channel": channel,
         "text": text
     }
     
-    # Заголовки запроса
+    # Request headers
     headers = {
         "Content-Type": "application/json"
     }
     
-    # Отправляем POST-запрос
+    # Send POST request
     response = requests.post(
         url,
-        data=json.dumps(payload),  # Сериализуем словарь в JSON
+        data=json.dumps(payload),  # Serialize dictionary to JSON
         headers=headers
     )
     
-    # Проверяем статус ответа
-    response.raise_for_status()  # Вызовет исключение для кодов 4xx/5xx
+    # Check response status
+    response.raise_for_status()  # Will raise exception for 4xx/5xx codes
     
-    # Возвращаем ответ в формате JSON, если он есть
+    # Return response in JSON format if available
     return {"status": "success"}
 
 
