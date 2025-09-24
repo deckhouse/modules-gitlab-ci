@@ -321,7 +321,7 @@ def main():
     
     # Validate required arguments for normal operation
     if not args.channel or not args.module_name:
-        parser.error("channel and module_name are required when not using --latest-tag")
+        parser.error("channel and module_name are required")
     
     repo_urls = [
         'https://github.com/deckhouse/sds-node-configurator',
