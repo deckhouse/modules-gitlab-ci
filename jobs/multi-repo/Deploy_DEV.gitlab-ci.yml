@@ -41,6 +41,7 @@ DEV | Publish default branch:
     - when: never
 
 DEV | Publish tags also to dev-registry:
+  stage: deploy
   variables:
     MODULES_REGISTRY: ${DEV_MODULES_REGISTRY}
     MODULES_REGISTRY_PATH: ${DEV_MODULES_REGISTRY_PATH}
