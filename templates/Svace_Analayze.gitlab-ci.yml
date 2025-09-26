@@ -1,4 +1,4 @@
-variables:
+# variables:
 #   SVACER_URL:
 #     description: "url to svacer server"
 #     value: "${SVACER_URL}"
