@@ -9,9 +9,11 @@
 #   $PROD_MODULES_REGISTRY_LOGIN - login for prod registry
 #   $PROD_MODULES_REGISTRY_PASSWORD - password for prod registry
 
-#   $SVACE_ANALYZE_HOST - hostname of the svace analyze vm
-#   $SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
-#   $SVACE_ANALYZE_SSH_PRIVATE_KEY- svace analyze server ssh private key
+
+#   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
+#   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
+#   SVACE_ANALYZE_SSH_PRIVATE_KEY_B64 - svace analyze server ssh private key
+
 
 variables:
   ##############################
@@ -48,7 +50,9 @@ variables:
     description: "Set to true if need force run workflow"
 
   # use module's container registry (on Gitlab) as werf's intermediate/cache images registry (repo with all build-time artifacts (garbage))
-  WERF_REPO: ${CI_REGISTRY_IMAGE}/${MODULES_MODULE_NAME}
+  WERF_REPO:
+    description: "Container registry storage address"
+    value: ${CI_REGISTRY_IMAGE}/${MODULES_MODULE_NAME}
   WERF_VERSION: "2 stable"
 
 stages:
@@ -119,9 +123,16 @@ stages:
         echo "DO NOT download base_images.yml because BASE_IMAGES_VERSION is empty"
       fi
 
+  # Download deckhouse lib-helm archive
+  - |
+    if [[ -n "${DECKHOUSE_LIB_HELM_VERSION}"  ]]; then
+      mkdir charts
+      curl --fail -sSLO https://github.com/deckhouse/lib-helm/releases/download/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}.tgz --output-dir ./charts
+    fi
+
     # Add ssh keys
     - |
-      if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
+      if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
 
         eval $(ssh-agent)
         trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
@@ -143,8 +154,8 @@ stages:
           fi
         fi
 
-        if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
-          ssh-add - <<< "${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
+        if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
+          echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d | ssh-add -
           if [[ -n "${SVACE_ANALYZE_HOST}" ]]; then
             echo "Adding svace ssh key (ignoring errors)."
             set +e
