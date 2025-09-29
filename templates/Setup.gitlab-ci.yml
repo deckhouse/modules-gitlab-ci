@@ -13,7 +13,8 @@
 #   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
 #   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
 #   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
-#   SVACE_ANALYZE_SSH_PRIVATE_KEY- svace analyze server ssh private key
+#   SVACE_ANALYZE_SSH_PRIVATE_KEY_B64 - svace analyze server ssh private key
+#   DECKHOUSE_LIB_HELM_VERSION - version of deckhouse lib-helm that will be downloaded
 
 variables:
   MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
@@ -58,9 +59,16 @@ before_script:
   - env | grep BASE_IMAGES_VERSION
   - curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
 
+  # Download deckhouse lib-helm archive
+  - |
+    if [[ -n "${DECKHOUSE_LIB_HELM_VERSION}"  ]]; then
+      mkdir charts
+      curl --fail -sSLO https://github.com/deckhouse/lib-helm/releases/download/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}.tgz --output-dir ./charts
+    fi
+
   # Add ssh keys
   - |
-    if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
+    if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
 
       eval $(ssh-agent)
       trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
@@ -82,8 +90,8 @@ before_script:
         fi
       fi
 
-      if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
-        ssh-add - <<< "${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
+      if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
+        echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d | ssh-add -
         if [[ -n "${SVACE_ANALYZE_HOST}" ]]; then
           echo "Adding svace ssh key (ignoring errors)."
           set +e

@@ -1,10 +1,4 @@
-variables:
-  SVACE_ENABLED:
-    description: "Enable Svace analysis"
-    value: "false"
-    options:
-      - "true"
-      - "false"
+# variables:
 #   SVACER_URL:
 #     description: "url to svacer server"
 #     value: "${SVACER_URL}"
@@ -32,7 +26,7 @@ variables:
     COMMIT_HASH: ${CI_COMMIT_SHA}
     SVACE_ANALYZE_HOST: "${SVACE_ANALYZE_HOST}"
     SVACE_ANALYZE_SSH_USER: "${SVACE_ANALYZE_SSH_USER}"
-    SVACE_ANALYZE_SSH_PRIVATE_KEY: "${SVACE_ANALYZE_SSH_PRIVATE_KEY}"
+    SVACE_ANALYZE_SSH_PRIVATE_KEY_B64: "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}"
     SVACE_ANALYZE_DIR: "svace-analyze"
     SVACER_URL: "${SVACER_URL}"
     SVACER_IMPORT_USER: "${SVACER_IMPORT_USER}"
@@ -51,7 +45,7 @@ variables:
           echo "Using new ssh auth sock: ${SSH_AUTH_SOCK}"
       fi
 
-      ssh-add - <<< "$SVACE_ANALYZE_SSH_PRIVATE_KEY"
+      echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d | ssh-add -
 
     # Add Svace analyze host to known_hosts
     - |
@@ -217,13 +211,20 @@ variables:
           --form project=\"${project_name}\" \
           --form branch=\"${branch_name}\" \
           --form file=@\"${archive_name}\" \
-          --form options=\"--project-group ${PROJECT_GROUP}\" \
-          --form options=\"--if-no-group ${IF_NO_GROUP}\" \
-          --form options=\"--field COMMIT_HASH:${COMMIT_HASH}\""
+          --form options='{\"values\":[ \
+          {\"option\":\"project-group\",\"value\":\"${PROJECT_GROUP}\"}, \
+          {\"option\":\"if-no-group\",\"value\":\"${IF_NO_GROUP}\"}, \
+          {\"option\":\"field\",\"value\":\"CI_COMMIT_HASH:${CI_COMMIT_HASH}\"}, \
+          {\"option\":\"field\",\"value\":\"CI_COMMIT_REF_NAME:${CI_COMMIT_REF_NAME}\"} \
+          ]}'"
 
           info "Importing \"${project_name}\"..."
           response=$(send_request "${svacer_import}" $request_attempts)
           read import_task_id import_task_status <<< $(jq -r '(.task_id|tostring)+" "+.status' <<< ${response})
+          if [[ -z "${import_task_id}" ]]; then
+              error "Import task failed. Response: ${response}"
+              exit 1
+          fi
           info "Import task scheduled succesfully. Task id: ${import_task_id}"
 
           get_import_log="curl --write-out \"\\n%{http_code}\" -sSL --request GET \
@@ -259,6 +260,27 @@ variables:
           fi
       }
 
+      define_import_params() {
+          local -n project="${1}"
+          local -n branch="${2}"
+          if [[ $(send "[[ -f ${proj}/.svace-dir/import-settings ]] && echo true || echo false") == true ]]; then
+              import_settings=$(send "cat /${proj}/.svace-dir/import-settings")
+              while IFS='=' read -r key val; do
+                  case "$key" in
+                  ProjectName)
+                      project=$val
+                      ;;
+                  Branch)
+                      branch=$val
+                      ;;
+                  *)
+                      warning "Undefined import setting \"${key}=${val}\" will be ommited!"
+                      ;;
+                  esac
+              done <<< "${import_settings}"
+          fi
+      }
+
       echo "Searching for current build artifacts on server by path: /${SVACE_ANALYZE_DIR}/${COMMIT_HASH}"
       if [[ $(send "[[ -d /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} ]] && echo true || echo false") == false ]]; then
         echo "::warning file=$(realpath "$0")::Specified commit directory doesn't exists on analyze server." && exit 0
@@ -273,7 +295,12 @@ variables:
           svacer_proj=${proj#/${SVACE_ANALYZE_DIR}/${COMMIT_HASH}/}
           build_item=${svacer_proj##*/}
 
+          import_project=${svacer_proj}
+          import_branch=${CI_COMMIT_REF_NAME}
+
           if [[ $(send "[[ -d ${proj}/.svace-dir ]] && echo true || echo false") == true ]]; then
+              define_import_params import_project import_branch
+
               info "Start analyzing project \"${svacer_proj}\" ..."
               send "svace config --svace-dir ${proj} THREAD_NUMBER auto"
               send "svace analyze --set-config SKIP_UNREACHABLE_PROCEDURE_ANALYSIS=${SKIP_UNREACHABLE_PROCEDURE_ANALYSIS} --quiet --svace-dir ${proj}"
@@ -287,8 +314,8 @@ variables:
           fi
 
           if [[ $(send "[[ -f ${proj}/${build_item}.tar.gz ]] && echo true || echo false") == true ]]; then
-              info "Start importing project \"${svacer_proj}\" ..."
-              upload_to_svacer "${svacer_proj}" "${COMMIT_REF_NAME}" "${proj}/${build_item}.tar.gz"
+              info "Start importing project \"${import_project}\" with branch \"${import_branch}\" ..."
+              upload_to_svacer "${import_project}" "${import_branch}" "${proj}/${build_item}.tar.gz"
               success "Import completed successfuly!"
           else
               warning "Nothing to import! Couldn't find \"${build_item}.tar.gz\" in \"${proj}\""
