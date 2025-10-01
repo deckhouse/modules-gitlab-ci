@@ -1,0 +1,64 @@
+.gitleaks_scan:
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl bash git jq tar
+    - |
+      echo "📥 Installing Gitleaks..."
+      ver="v8.28.0"
+      file_ver="${ver#v}"
+      arch="$(uname -m)"
+      case "$arch" in
+        x86_64|amd64)  pkg_arch="linux_x64" ;;
+        aarch64|arm64) pkg_arch="linux_arm64" ;;
+        *) echo "Unsupported arch: $arch"; exit 1 ;;
+      esac
+      base="https://github.com/gitleaks/gitleaks/releases/download/${ver}"
+      tgz="gitleaks_${file_ver}_${pkg_arch}.tar.gz"
+      curl -sSL "$base/$tgz" -o gitleaks.tgz
+      tar -xzf gitleaks.tgz gitleaks
+      chmod +x gitleaks
+      mv gitleaks /usr/local/bin/
+      gitleaks version
+  script:
+    - |
+      if [[ ! -f ".github/gitleaks.toml" ]]; then
+        echo "❌ Missing config '.github/gitleaks.toml'"
+        exit 1
+      fi
+
+      echo "🕵️ Running Gitleaks in mode: $SCAN_MODE"
+
+      if [[ "$SCAN_MODE" == "diff" ]]; then
+        BASE_SHA=$(git merge-base origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME HEAD || echo "")
+        if [[ -z "$BASE_SHA" ]]; then
+          echo "⚠️ Base SHA not found, falling back to full scan"
+          SCAN_MODE="full"
+        else
+          echo "▶ Running diff scan $BASE_SHA...HEAD"
+          gitleaks detect --no-banner \
+            --report-format json --report-path gitleaks.json \
+            -c .github/gitleaks.toml --source . --log-opts "$BASE_SHA...HEAD"
+        fi
+      fi
+
+      if [[ "$SCAN_MODE" == "full" ]]; then
+        echo "▶ Running full scan"
+        gitleaks detect --no-banner \
+          --report-format json --report-path gitleaks.json \
+          -c .github/gitleaks.toml --source .
+      fi
+
+      echo "📄 Report Summary"
+      if [[ -f gitleaks.json ]]; then
+        COUNT=$(jq 'if type=="array" then length else 0 end' gitleaks.json)
+        echo "Findings: $COUNT"
+      else
+        echo "No report found"
+      fi
+  artifacts:
+    when: always
+    paths:
+      - gitleaks.json
+    reports:
+      dotenv: # можно прикрутить вывод переменных или json анализ
+  allow_failure: true
