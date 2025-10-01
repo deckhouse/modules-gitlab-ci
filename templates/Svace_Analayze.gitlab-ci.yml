@@ -214,8 +214,8 @@
           --form options='{\"values\":[ \
           {\"option\":\"project-group\",\"value\":\"${PROJECT_GROUP}\"}, \
           {\"option\":\"if-no-group\",\"value\":\"${IF_NO_GROUP}\"}, \
-          {\"option\":\"field\",\"value\":\"COMMIT_HASH:${COMMIT_HASH}\"}, \
-          {\"option\":\"field\",\"value\":\"COMMIT_REF_NAME:${COMMIT_REF_NAME}\"} \
+          {\"option\":\"field\",\"value\":\"CI_COMMIT_HASH:${COMMIT_HASH}\"}, \
+          {\"option\":\"field\",\"value\":\"CI_COMMIT_REF_NAME:${COMMIT_REF_NAME}\"} \
           ]}'"
 
           info "Importing \"${project_name}\"..."
