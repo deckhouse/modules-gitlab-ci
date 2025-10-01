@@ -22,8 +22,8 @@
 .svace_analyze:
   variables:
     PROJECT_GROUP: ${CI_PROJECT_NAME}
-    CI_COMMIT_REF_NAME: ${CI_COMMIT_REF_NAME}
-    CI_COMMIT_HASH: ${CI_COMMIT_SHA}
+    COMMIT_REF_NAME: ${CI_COMMIT_REF_NAME}
+    COMMIT_HASH: ${CI_COMMIT_SHA}
     SVACE_ANALYZE_HOST: "${SVACE_ANALYZE_HOST}"
     SVACE_ANALYZE_SSH_USER: "${SVACE_ANALYZE_SSH_USER}"
     SVACE_ANALYZE_SSH_PRIVATE_KEY_B64: "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}"
@@ -67,8 +67,8 @@
 
     # Start Svace analysis
     - |
-      echo "CI_COMMIT_REF_NAME: ${CI_COMMIT_REF_NAME}"
-      echo "CI_COMMIT_HASH: ${CI_COMMIT_HASH}"
+      echo "COMMIT_REF_NAME: ${COMMIT_REF_NAME}"
+      echo "COMMIT_HASH: ${COMMIT_HASH}"
 
       set -e
 
@@ -214,8 +214,8 @@
           --form options='{\"values\":[ \
           {\"option\":\"project-group\",\"value\":\"${PROJECT_GROUP}\"}, \
           {\"option\":\"if-no-group\",\"value\":\"${IF_NO_GROUP}\"}, \
-          {\"option\":\"field\",\"value\":\"CI_COMMIT_HASH:${CI_COMMIT_HASH}\"}, \
-          {\"option\":\"field\",\"value\":\"CI_COMMIT_REF_NAME:${CI_COMMIT_REF_NAME}\"} \
+          {\"option\":\"field\",\"value\":\"COMMIT_HASH:${COMMIT_HASH}\"}, \
+          {\"option\":\"field\",\"value\":\"COMMIT_REF_NAME:${COMMIT_REF_NAME}\"} \
           ]}'"
 
           info "Importing \"${project_name}\"..."
@@ -294,22 +294,22 @@
           fi
       }
 
-      echo "Searching for current build artifacts on server by path: /${SVACE_ANALYZE_DIR}/${CI_COMMIT_HASH}"
-      if [[ $(send "[[ -d /${SVACE_ANALYZE_DIR}/${CI_COMMIT_HASH} ]] && echo true || echo false") == false ]]; then
+      echo "Searching for current build artifacts on server by path: /${SVACE_ANALYZE_DIR}/${COMMIT_HASH}"
+      if [[ $(send "[[ -d /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} ]] && echo true || echo false") == false ]]; then
         warning "Specified commit directory doesn't exists on analyze server." && exit 0
       fi
 
-      projects=$(send "find /${SVACE_ANALYZE_DIR}/${CI_COMMIT_HASH} \\( -type d -iname .svace-dir -o -iname *.tar.gz \\) -exec dirname {} \\;")
+      projects=$(send "find /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} \\( -type d -iname .svace-dir -o -iname *.tar.gz \\) -exec dirname {} \\;")
       [[ -z $projects ]] && warning "Nothing to analyze in ${proj}" && echo "::warning file=$(realpath "$0")::Nothing to analyze" && exit 0
       info "${projects}"
 
       info "Starting svace analyze..."
       for proj in $projects; do
-          svacer_proj=${proj#/${SVACE_ANALYZE_DIR}/${CI_COMMIT_HASH}/}
+          svacer_proj=${proj#/${SVACE_ANALYZE_DIR}/${COMMIT_HASH}/}
           build_item=${svacer_proj##*/}
 
           import_project=${svacer_proj}
-          import_branch=${CI_COMMIT_REF_NAME}
+          import_branch=${COMMIT_REF_NAME}
 
           if [[ $(send "[[ -d ${proj}/.svace-dir ]] && echo true || echo false") == true ]]; then
               define_import_params import_project import_branch
@@ -338,7 +338,7 @@
 
           info "Cleaning up artifacts..."
           send "rm -rf ${proj}"
-          send "find /${SVACE_ANALYZE_DIR}/${CI_COMMIT_HASH} -maxdepth 2 -type d -empty -delete"
+          send "find /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} -maxdepth 2 -type d -empty -delete"
           info "Cleanup completed successfully"
       done
 
