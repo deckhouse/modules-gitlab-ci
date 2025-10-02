@@ -214,8 +214,8 @@
           --form options='{\"values\":[ \
           {\"option\":\"project-group\",\"value\":\"${PROJECT_GROUP}\"}, \
           {\"option\":\"if-no-group\",\"value\":\"${IF_NO_GROUP}\"}, \
-          {\"option\":\"field\",\"value\":\"CI_COMMIT_HASH:${CI_COMMIT_HASH}\"}, \
-          {\"option\":\"field\",\"value\":\"CI_COMMIT_REF_NAME:${CI_COMMIT_REF_NAME}\"} \
+          {\"option\":\"field\",\"value\":\"CI_COMMIT_HASH:${COMMIT_HASH}\"}, \
+          {\"option\":\"field\",\"value\":\"CI_COMMIT_REF_NAME:${COMMIT_REF_NAME}\"} \
           ]}'"
 
           info "Importing \"${project_name}\"..."
@@ -281,9 +281,22 @@
           fi
       }
 
+      get_svace_bin() {
+          proj="${1}"
+          svace_version=$(send "cat ${proj}/.svace-dir/svace-dir.version | awk 'FNR==3{print}'")
+
+          svace_bin="/opt/svace-${svace_version}/bin/svace"
+          if [[ $(send "[[ -x ${svace_bin} ]] && echo true || echo false") == true ]]; then
+              echo "${svace_bin}"
+          else
+              echo "svace"
+              error "\"${svace_bin}\" is not executable on analyze server. Using default."
+          fi
+      }
+
       echo "Searching for current build artifacts on server by path: /${SVACE_ANALYZE_DIR}/${COMMIT_HASH}"
       if [[ $(send "[[ -d /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} ]] && echo true || echo false") == false ]]; then
-        echo "::warning file=$(realpath "$0")::Specified commit directory doesn't exists on analyze server." && exit 0
+        warning "Specified commit directory doesn't exists on analyze server." && exit 0
       fi
 
       projects=$(send "find /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} \\( -type d -iname .svace-dir -o -iname *.tar.gz \\) -exec dirname {} \\;")
@@ -296,14 +309,16 @@
           build_item=${svacer_proj##*/}
 
           import_project=${svacer_proj}
-          import_branch=${CI_COMMIT_REF_NAME}
+          import_branch=${COMMIT_REF_NAME}
 
           if [[ $(send "[[ -d ${proj}/.svace-dir ]] && echo true || echo false") == true ]]; then
               define_import_params import_project import_branch
+              svace_bin=$(get_svace_bin "${proj}")
+              info "Using svace binary: $svace_bin"
 
               info "Start analyzing project \"${svacer_proj}\" ..."
-              send "svace config --svace-dir ${proj} THREAD_NUMBER auto"
-              send "svace analyze --set-config SKIP_UNREACHABLE_PROCEDURE_ANALYSIS=${SKIP_UNREACHABLE_PROCEDURE_ANALYSIS} --quiet --svace-dir ${proj}"
+              send "${svace_bin} config --svace-dir ${proj} THREAD_NUMBER auto"
+              send "${svace_bin} analyze --set-config SKIP_UNREACHABLE_PROCEDURE_ANALYSIS=${SKIP_UNREACHABLE_PROCEDURE_ANALYSIS} --quiet --svace-dir ${proj}"
               success "Analysis completed successfully!"
 
               info "Start archiving project \"${svacer_proj}\" ..."
