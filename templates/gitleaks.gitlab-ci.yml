@@ -72,8 +72,6 @@ variables:
         COUNT=$(jq length gitleaks.json)
         echo "❌ Leaks found: $COUNT"
         echo ""
-        echo "| Rule | Location | Commit | Link |"
-        echo "|------|----------|--------|------|"
         jq -r '
           def norm:
             {
@@ -85,8 +83,12 @@ variables:
           (if type=="object" and has("findings") then .findings
            elif type=="array" then .
            else [] end)[] | norm
-          | "| \(.rule) | \(.file):\(.line) | \(.commit[0:7]) | https://'$CI_PROJECT_PATH'/blob/\(.commit)/\(.file)#L\(.line) |"
-        ' gitleaks.json | head -n 200
+          | [.rule, (.file+":"+.line|tostring), (.commit[0:7]),
+             ("https://'$CI_PROJECT_PATH'/blob/"+.commit+"/"+.file+"#L"+(.line|tostring))]
+          | @tsv
+        ' gitleaks.json | head -n 200 | while IFS=$'\t' read -r rule loc sha link; do
+          printf '• [%s] %s %s %s\n' "$rule" "$loc" "$sha" "$link"
+        done
       else
         echo "✅ No leaks found."
       fi
