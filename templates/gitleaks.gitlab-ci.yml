@@ -55,15 +55,17 @@ variables:
           exit 1
         fi
         echo "▶ Scanning diff: $BASE_SHA...HEAD"
-        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "$BASE_SHA...HEAD"
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "$BASE_SHA...HEAD" || GITLEAKS_EXIT=$?
 
       elif [[ "$SCAN_MODE" == "full" ]]; then
         echo "🕵️ Running in FULL mode..."
-        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source .
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . || GITLEAKS_EXIT=$?
       else
         echo "❌ Unknown SCAN_MODE: $SCAN_MODE"
         exit 1
       fi
+      
+      echo "🔍 Gitleaks exit code: ${GITLEAKS_EXIT:-0}"
 
     # Parse and print results
     - |
@@ -75,20 +77,23 @@ variables:
         jq -r '
           def norm:
             {
-              file: (.File // .file // .Target // .Location.File // ""),
+              file: (.File // .file // .Target // .Location.File // "unknown"),
               line: (.StartLine // .Line // .Location.StartLine // 0),
-              rule: (.RuleID // .Rule // .Description // ""),
+              rule: (.RuleID // .Rule // .Description // "unknown"),
               commit: (.Commit // .commit // "")
             };
           (if type=="object" and has("findings") then .findings
            elif type=="array" then .
            else [] end)[] | norm
-          | [.rule, (.file+":"+.line|tostring), (.commit[0:7]),
-             ("https://'$CI_PROJECT_PATH'/blob/"+.commit+"/"+.file+"#L"+(.line|tostring))]
-          | @tsv
-        ' gitleaks.json | head -n 200 | while IFS=$'\t' read -r rule loc sha link; do
-          printf '• [%s] %s %s %s\n' "$rule" "$loc" "$sha" "$link"
-        done
+          | "• [\(.rule)] \(.file):\(.line) \(.commit[0:7] // "no-commit") https://'$CI_PROJECT_PATH'/blob/\(.commit)/\(.file)#L\(.line)"
+        ' gitleaks.json | head -n 200
+        
+        # Fail the job if leaks were found
+        if [[ "$COUNT" -gt 0 ]]; then
+          echo ""
+          echo "❌ Pipeline failed due to $COUNT leak(s). Review gitleaks.json artifact."
+          exit 1
+        fi
       else
         echo "✅ No leaks found."
       fi
