@@ -1,123 +1,124 @@
 stages:
   - gitleaks
 
+variables:
+  GITLEAKS_VERSION: "v8.28.0"
+
 .gitleaks_scan:
-  tags:
-    - tfprod-distributed-werf
   stage: gitleaks
-  before_script:
+  script:
     - set -euo pipefail
+
+    # Determine arch
     - |
-      # Ensure basic tools (curl/wget, tar, jq) are available in both shell and container executors
-      if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-        if [ -f /etc/alpine-release ]; then
-          apk add --no-cache curl || true
-        elif [ -f /etc/debian_version ]; then
-          apt-get update -y && apt-get install -y curl || true
-        fi
-      fi
-      if ! command -v jq >/dev/null 2>&1; then
-        if [ -f /etc/alpine-release ]; then
-          apk add --no-cache jq || true
-        elif [ -f /etc/debian_version ]; then
-          apt-get update -y && apt-get install -y jq || true
-        fi
-      fi
-      if ! command -v tar >/dev/null 2>&1; then
-        if [ -f /etc/alpine-release ]; then
-          apk add --no-cache tar || true
-        elif [ -f /etc/debian_version ]; then
-          apt-get update -y && apt-get install -y tar || true
-        fi
-      fi
-    - |
-      echo "📥 Installing Gitleaks..."
-      ver="v8.28.0"
-      file_ver="${ver#v}"
+      echo "📥 Installing Gitleaks $GITLEAKS_VERSION..."
+      file_ver="${GITLEAKS_VERSION#v}"
       arch="$(uname -m)"
       case "$arch" in
         x86_64|amd64)  pkg_arch="linux_x64" ;;
         aarch64|arm64) pkg_arch="linux_arm64" ;;
         *) echo "Unsupported arch: $arch"; exit 1 ;;
       esac
-      base="https://github.com/gitleaks/gitleaks/releases/download/${ver}"
+
+    # Download and install
+    - |
+      base="https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}"
       tgz="gitleaks_${file_ver}_${pkg_arch}.tar.gz"
-      if command -v curl >/dev/null 2>&1; then
-        curl -sSL "$base/$tgz" -o gitleaks.tgz
-      else
-        wget -qO gitleaks.tgz "$base/$tgz"
-      fi
+      curl -sSL "$base/$tgz" -o gitleaks.tgz
       tar -xzf gitleaks.tgz gitleaks
       chmod +x gitleaks
-      # Try to put into PATH (works on shell runners); fallback to current dir
-      mv -f gitleaks /usr/local/bin/gitleaks 2>/dev/null || mv -f gitleaks ./gitleaks
-      if ! command -v gitleaks >/dev/null 2>&1; then
-        export PATH="$PWD:$PATH"
-      fi
+      mv gitleaks /usr/local/bin/
       gitleaks version
-  script:
+
+    # Check for config
     - |
-      if [ ! -f "gitleaks.toml" ]; then
-        echo "❌ Missing config 'gitleaks.toml'"
+      if [[ -f "gitleaks.toml" ]]; then
+        CONFIG_ARG="-c gitleaks.toml"
+        echo "✅ Found config: gitleaks.toml"
+      else
+        CONFIG_ARG=""
+        echo "⚠️ Config file not found. Proceeding with default rules."
+      fi
+
+    # Run scan
+    - |
+      if [[ "$SCAN_MODE" == "diff" ]]; then
+        echo "🕵️ Running in DIFF mode..."
+        git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --depth=0
+        BASE_SHA=$(git merge-base origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME HEAD || echo "")
+        if [[ -z "$BASE_SHA" ]]; then
+          echo "❌ BASE_SHA not found. Aborting."
+          exit 1
+        fi
+        echo "▶ Scanning diff: $BASE_SHA...HEAD"
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "$BASE_SHA...HEAD"
+
+      elif [[ "$SCAN_MODE" == "full" ]]; then
+        echo "🕵️ Running in FULL mode..."
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source .
+      else
+        echo "❌ Unknown SCAN_MODE: $SCAN_MODE"
         exit 1
       fi
 
-      echo "🕵️ Running Gitleaks in mode: $SCAN_MODE"
+    # Parse and print results
+    - |
+      if [[ -f gitleaks.json ]]; then
+        COUNT=$(jq -r 'if type=="array" then length else (if has("findings") then .findings|length else 0 end) end' gitleaks.json)
+        echo "🔎 Findings: $COUNT"
+        LIMIT=200
+        echo -e "\n| Rule | File:Line | Commit | Link |"
+        echo "|------|------------|--------|------|"
 
-      if [ "$SCAN_MODE" = "diff" ]; then
-        BASE_SHA=$(git merge-base origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME HEAD || echo "")
-        if [ -z "$BASE_SHA" ]; then
-          echo "⚠️ Base SHA not found, falling back to full scan"
-          SCAN_MODE="full"
-        else
-          echo "▶ Running diff scan $BASE_SHA...HEAD"
-          gitleaks detect --no-banner \
-            --report-format json --report-path gitleaks.json \
-            -c gitleaks.toml --source . --log-opts "$BASE_SHA...HEAD"
+        jq -r '
+          def norm:
+            {
+              file: (.File // .file // .Target // .Location.File // ""),
+              line: (.StartLine // .Line // .Location.StartLine // 0),
+              rule: (.RuleID // .Rule // .Description // ""),
+              commit: (.Commit // .commit // "")
+            };
+          (if type=="object" and has("findings") then .findings
+           elif type=="array" then .
+           else [] end)[] | norm
+        ' gitleaks.json \
+        | head -n "$LIMIT" \
+        | jq -s -r '.[] | "| \(.rule) | \(.file):\(.line) | \(.commit[0:7]) | https://$CI_PROJECT_PATH/blob/\(.commit)/\(.file)#L\(.line) |"' || true
+
+        if (( COUNT > LIMIT )); then
+          echo "... and $((COUNT - LIMIT)) more (see gitleaks.json artifact)"
         fi
-      fi
-
-      if [ "$SCAN_MODE" = "full" ]; then
-        echo "▶ Running full scan"
-        gitleaks detect --no-banner \
-          --report-format json --report-path gitleaks.json \
-          -c gitleaks.toml --source .
-      fi
-
-      echo "📄 Report Summary"
-      if [ -f gitleaks.json ]; then
-        COUNT=$(jq 'if type=="array" then length else 0 end' gitleaks.json)
-        echo "Findings: $COUNT"
       else
-        echo "No report found"
+        echo "ℹ️ No gitleaks.json found"
       fi
+
+  after_script:
+    - rm -f /usr/local/bin/gitleaks gitleaks.tgz gitleaks.json || true
+
   artifacts:
     when: always
     paths:
       - gitleaks.json
-    expire_in: 1 week
-  after_script:
-    - |
-      # Cleanup temporary files; keep gitleaks.json for artifact collection
-      rm -f /usr/local/bin/gitleaks 2>/dev/null || true
-      rm -f ./gitleaks 2>/dev/null || true
-      rm -f gitleaks.tgz 2>/dev/null || true
-  allow_failure: true
+
+  allow_failure: false
 
 gitleaks_diff:
   extends: .gitleaks_scan
-  tags:
-    - tfprod-distributed-werf
   variables:
     SCAN_MODE: "diff"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
-gitleaks_full:
+gitleaks_full_manual:
   extends: .gitleaks_scan
-  tags:
-    - tfprod-distributed-werf
   variables:
     SCAN_MODE: "full"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
+
+gitleaks_full_scheduled:
+  extends: .gitleaks_scan
+  variables:
+    SCAN_MODE: "full"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
