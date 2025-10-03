@@ -1,5 +1,6 @@
 stages:
   - gitleaks
+  - gitleaks_cleanup
 
 variables:
   GITLEAKS_VERSION: "v8.28.0"
@@ -95,8 +96,6 @@ variables:
         echo "ℹ️ No gitleaks.json found"
       fi
 
-  after_script:
-    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz gitleaks.json || true
 
   artifacts:
     when: always
@@ -125,3 +124,17 @@ gitleaks_full_scheduled:
     SCAN_MODE: "full"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+gitleaks_cleanup:
+  stage: gitleaks_cleanup
+  script:
+    - echo "🧹 Cleaning up runner workspace..."
+    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz gitleaks.json || true
+  needs:
+    - job: gitleaks_diff
+      artifacts: true
+    - job: gitleaks_full_manual
+      artifacts: true
+    - job: gitleaks_full_scheduled
+      artifacts: true
+  when: always
