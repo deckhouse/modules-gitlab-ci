@@ -133,8 +133,12 @@ gitleaks_cleanup:
   needs:
     - job: gitleaks_diff
       artifacts: true
+      optional: true
     - job: gitleaks_full_manual
       artifacts: true
+      optional: true
     - job: gitleaks_full_scheduled
       artifacts: true
-  when: always
+      optional: true
+  rules:
+    - if: '$CI_JOB_STATUS == "success" || $CI_JOB_STATUS == "failed"'
