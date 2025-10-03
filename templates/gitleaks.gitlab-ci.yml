@@ -28,7 +28,9 @@ variables:
       curl -sSL "$base/$tgz" -o gitleaks.tgz
       tar -xzf gitleaks.tgz gitleaks
       chmod +x gitleaks
-      mv gitleaks /usr/local/bin/
+      mkdir -p "$HOME/.local/bin"
+      mv gitleaks "$HOME/.local/bin/"
+      export PATH="$HOME/.local/bin:$PATH"
       gitleaks version
 
     # Check for config
@@ -94,7 +96,7 @@ variables:
       fi
 
   after_script:
-    - rm -f /usr/local/bin/gitleaks gitleaks.tgz gitleaks.json || true
+    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz gitleaks.json || true
 
   artifacts:
     when: always
