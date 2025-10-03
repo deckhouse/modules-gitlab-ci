@@ -2,12 +2,34 @@ stages:
   - gitleaks
 
 .gitleaks_scan:
-  image: alpine:latest
   tags:
     - tfprod-distributed-werf
   stage: gitleaks
   before_script:
-    - apk add --no-cache curl bash git jq tar
+    - set -euo pipefail
+    - |
+      # Ensure basic tools (curl/wget, tar, jq) are available in both shell and container executors
+      if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+        if [ -f /etc/alpine-release ]; then
+          apk add --no-cache curl || true
+        elif [ -f /etc/debian_version ]; then
+          apt-get update -y && apt-get install -y curl || true
+        fi
+      fi
+      if ! command -v jq >/dev/null 2>&1; then
+        if [ -f /etc/alpine-release ]; then
+          apk add --no-cache jq || true
+        elif [ -f /etc/debian_version ]; then
+          apt-get update -y && apt-get install -y jq || true
+        fi
+      fi
+      if ! command -v tar >/dev/null 2>&1; then
+        if [ -f /etc/alpine-release ]; then
+          apk add --no-cache tar || true
+        elif [ -f /etc/debian_version ]; then
+          apt-get update -y && apt-get install -y tar || true
+        fi
+      fi
     - |
       echo "📥 Installing Gitleaks..."
       ver="v8.28.0"
@@ -20,23 +42,31 @@ stages:
       esac
       base="https://github.com/gitleaks/gitleaks/releases/download/${ver}"
       tgz="gitleaks_${file_ver}_${pkg_arch}.tar.gz"
-      curl -sSL "$base/$tgz" -o gitleaks.tgz
+      if command -v curl >/dev/null 2>&1; then
+        curl -sSL "$base/$tgz" -o gitleaks.tgz
+      else
+        wget -qO gitleaks.tgz "$base/$tgz"
+      fi
       tar -xzf gitleaks.tgz gitleaks
       chmod +x gitleaks
-      mv gitleaks /usr/local/bin/
+      # Try to put into PATH (works on shell runners); fallback to current dir
+      mv -f gitleaks /usr/local/bin/gitleaks 2>/dev/null || mv -f gitleaks ./gitleaks
+      if ! command -v gitleaks >/dev/null 2>&1; then
+        export PATH="$PWD:$PATH"
+      fi
       gitleaks version
   script:
     - |
-      if [[ ! -f "gitleaks.toml" ]]; then
+      if [ ! -f "gitleaks.toml" ]; then
         echo "❌ Missing config 'gitleaks.toml'"
         exit 1
       fi
 
       echo "🕵️ Running Gitleaks in mode: $SCAN_MODE"
 
-      if [[ "$SCAN_MODE" == "diff" ]]; then
+      if [ "$SCAN_MODE" = "diff" ]; then
         BASE_SHA=$(git merge-base origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME HEAD || echo "")
-        if [[ -z "$BASE_SHA" ]]; then
+        if [ -z "$BASE_SHA" ]; then
           echo "⚠️ Base SHA not found, falling back to full scan"
           SCAN_MODE="full"
         else
@@ -47,7 +77,7 @@ stages:
         fi
       fi
 
-      if [[ "$SCAN_MODE" == "full" ]]; then
+      if [ "$SCAN_MODE" = "full" ]; then
         echo "▶ Running full scan"
         gitleaks detect --no-banner \
           --report-format json --report-path gitleaks.json \
@@ -55,7 +85,7 @@ stages:
       fi
 
       echo "📄 Report Summary"
-      if [[ -f gitleaks.json ]]; then
+      if [ -f gitleaks.json ]; then
         COUNT=$(jq 'if type=="array" then length else 0 end' gitleaks.json)
         echo "Findings: $COUNT"
       else
@@ -65,6 +95,13 @@ stages:
     when: always
     paths:
       - gitleaks.json
+    expire_in: 1 week
+  after_script:
+    - |
+      # Cleanup temporary files; keep gitleaks.json for artifact collection
+      rm -f /usr/local/bin/gitleaks 2>/dev/null || true
+      rm -f ./gitleaks 2>/dev/null || true
+      rm -f gitleaks.tgz 2>/dev/null || true
   allow_failure: true
 
 gitleaks_diff:
