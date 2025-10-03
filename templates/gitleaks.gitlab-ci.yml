@@ -6,6 +6,7 @@ variables:
 
 .gitleaks_scan:
   stage: gitleaks
+  before_script: []
   script:
     - set -euo pipefail
 
