@@ -67,13 +67,13 @@ variables:
 
     # Parse and print results
     - |
-      if [[ -f gitleaks.json ]]; then
-        COUNT=$(jq -r 'if type=="array" then length else (if has("findings") then .findings|length else 0 end) end' gitleaks.json)
-        echo "🔎 Findings: $COUNT"
-        LIMIT=200
-        echo -e "\n| Rule | File:Line | Commit | Link |"
-        echo "|------|------------|--------|------|"
-
+      echo "📤 Parsing gitleaks.json for CI log output..."
+      if [[ -s gitleaks.json ]]; then
+        COUNT=$(jq length gitleaks.json)
+        echo "❌ Leaks found: $COUNT"
+        echo ""
+        echo "| Rule | Location | Commit | Link |"
+        echo "|------|----------|--------|------|"
         jq -r '
           def norm:
             {
@@ -85,15 +85,10 @@ variables:
           (if type=="object" and has("findings") then .findings
            elif type=="array" then .
            else [] end)[] | norm
-        ' gitleaks.json \
-        | head -n "$LIMIT" \
-        | jq -s -r '.[] | "| \(.rule) | \(.file):\(.line) | \(.commit[0:7]) | https://$CI_PROJECT_PATH/blob/\(.commit)/\(.file)#L\(.line) |"' || true
-
-        if (( COUNT > LIMIT )); then
-          echo "... and $((COUNT - LIMIT)) more (see gitleaks.json artifact)"
-        fi
+          | "| \(.rule) | \(.file):\(.line) | \(.commit[0:7]) | https://'$CI_PROJECT_PATH'/blob/\(.commit)/\(.file)#L\(.line) |"
+        ' gitleaks.json | head -n 200
       else
-        echo "ℹ️ No gitleaks.json found"
+        echo "✅ No leaks found."
       fi
 
 
