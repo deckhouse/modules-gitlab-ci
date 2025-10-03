@@ -65,12 +65,12 @@ stages:
     when: always
     paths:
       - gitleaks.json
-    reports:
-      dotenv:
   allow_failure: true
 
 gitleaks_diff:
   extends: .gitleaks_scan
+  tags:
+    - tfprod-distributed-werf
   variables:
     SCAN_MODE: "diff"
   rules:
@@ -78,6 +78,8 @@ gitleaks_diff:
 
 gitleaks_full:
   extends: .gitleaks_scan
+  tags:
+    - tfprod-distributed-werf
   variables:
     SCAN_MODE: "full"
   rules:
