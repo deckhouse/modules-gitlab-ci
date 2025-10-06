@@ -135,15 +135,5 @@ gitleaks_cleanup:
   script:
     - echo "🧹 Cleaning up runner workspace..."
     - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz gitleaks.json || true
-  needs:
-    - job: gitleaks_diff
-      artifacts: true
-      optional: true
-    - job: gitleaks_full_manual
-      artifacts: true
-      optional: true
-    - job: gitleaks_full_scheduled
-      artifacts: true
-      optional: true
   rules:
     - when: always
