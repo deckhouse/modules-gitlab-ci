@@ -145,4 +145,4 @@ gitleaks_cleanup:
       artifacts: true
       optional: true
   rules:
-    - if: '$CI_JOB_STATUS == "success" || $CI_JOB_STATUS == "failed"'
+    - when: always
