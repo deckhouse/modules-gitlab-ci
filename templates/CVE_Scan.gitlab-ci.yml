@@ -15,213 +15,106 @@
 #   $SEVERITY - Vulnerabilities severity to scan. Default is: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
 #   $MODULE_PROD_REGISTRY_CUSTOM_PATH - Module custom path in prod registry. Example: flant/modules
 #   $MODULE_DEV_REGISTRY_CUSTOM_PATH - Module custom path in dev registry. Example: flant/modules
+#   $CVE_TESTS_REPO_GIT - Git URL private repository with CVE scripts (required)
+#   $CVE_TESTS_REPO_SSH_PRIVATE_KEY - SSH private key for access to the CVE tests repository (required)
 
 .cve_scan:
   variables:
-    TRIVY_BIN_VERSION: "v0.63.0"
-    TRIVY_REPO_ID: "2181"
-    TRIVY_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-db:2"
-    TRIVY_JAVA_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
-    TRIVY_POLICY_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
-    IMAGES_DIGESTS_PATH: "/images_digests.json"
+    # Рабочая директория для временных файлов CVE сканирования
+    WORKDIR: "cve-scan"
+  before_script:
+    # Настройка SSH для доступа к приватному репозиторию с CVE скриптами
+    - |
+      echo "[SSH_SETUP] Setup SSH access to the private repository"
+      echo "============================================================="
+
+      eval $(ssh-agent -s)
+      echo "$CVE_TESTS_REPO_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+      HOST=$(echo "$CVE_TESTS_REPO_GIT" | sed -n 's/.*@\([^:]*\):.*/\1/p')
+      echo "Adding host to known_hosts: $HOST"
+      mkdir -p ~/.ssh
+      touch ~/.ssh/known_hosts
+      ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      echo "SSH setup completed successfully"
+      echo ""
+
+    - |
+      echo "[SCRIPT_DOWNLOAD] Downloading CVE script from the private GitLab repository"
+      echo "================================================================="
+      
+      mkdir -p "${WORKDIR}/scripts"
+      echo "Cloning repository: $CVE_TESTS_REPO_GIT"
+      git clone "$CVE_TESTS_REPO_GIT" "${WORKDIR}/scripts"
+      chmod +x "${WORKDIR}/scripts/cve_scan.sh"
+      
+      echo "CVE script successfully downloaded and configured"
+      echo ""
+
   script:
-    # Creating workdir
     - |
-      echo "Creating workdir"
-      workdir="trivy_scan"
-      # remove workdir in case it was not removed on previous run
-      rm -rf "${workdir}"
-      mkdir "${workdir}"
-      echo
-      echo "======================================================="
-      echo
-    # Preparing DOCKER_CONFIG and login to registries
-    - |
-      echo "Preparing DOCKER_CONFIG and login to registries"
-      mkdir -p "${workdir}/docker"
-      export DOCKER_CONFIG="${workdir}/docker"
-      echo ${PROD_REGISTRY_PASSWORD} | docker login --username="${PROD_REGISTRY_USER}" --password-stdin ${PROD_REGISTRY}
-      echo ${DEV_REGISTRY_PASSWORD} | docker login --username="${DEV_REGISTRY_USER}" --password-stdin ${DEV_REGISTRY}
-      echo
-      echo "======================================================="
-      echo
-    # Get Trivy
-    - |
-      echo "Get Trivy"
-      echo "Trivy version: ${TRIVY_BIN_VERSION}"
-      mkdir -p "${workdir}/bin/trivy-${TRIVY_BIN_VERSION}"
-      curl -L -s --fail-with-body ${CI_API_V4_URL}/projects/${TRIVY_REPO_ID}/packages/generic/trivy-${TRIVY_BIN_VERSION}/${TRIVY_BIN_VERSION}/trivy -o ${workdir}/bin/trivy-${TRIVY_BIN_VERSION}/trivy
-      chmod u+x ${workdir}/bin/trivy-${TRIVY_BIN_VERSION}/trivy
-      ln -s ${PWD}/${workdir}/bin/trivy-${TRIVY_BIN_VERSION}/trivy ${workdir}/bin/trivy
-
-      echo "Updating Trivy Data Bases"
-      mkdir -p "${workdir}/bin/trivy_cache"
-      ${workdir}/bin/trivy image --username "${PROD_REGISTRY_USER}" --password "${PROD_REGISTRY_PASSWORD}" --download-db-only --db-repository "${TRIVY_DB_URL}" --cache-dir "${workdir}/bin/trivy_cache"
-      ${workdir}/bin/trivy image --username "${PROD_REGISTRY_USER}" --password "${PROD_REGISTRY_PASSWORD}" --download-java-db-only --java-db-repository "${TRIVY_JAVA_DB_URL}" --cache-dir "${workdir}/bin/trivy_cache"
-      echo
-      echo "======================================================="
-      echo
-
-    # Run Trivy scan
-    - |
-      echo "Setting up registry path for module"
-      PROD_REGISTRY_MODULE_BASEDIR="${PROD_REGISTRY}/${MODULE_PROD_REGISTRY_CUSTOM_PATH:-deckhouse/fe/modules}"
-      DEV_REGISTRY_MODULE_BASEDIR="${DEV_REGISTRY}/${MODULE_DEV_REGISTRY_CUSTOM_PATH:-sys/deckhouse-oss/modules}"
-      severity="${SEVERITY:-UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL}"
-      latest_releases_amount="${LATEST_RELEASES_AMOUNT:-3}"
-      # If input var TAG is empty - set to default branch
+      echo "[CVE_EXECUTION] Starting CVE scanning for external modules"
+      echo "==========================================================="
+      
       if [ -z "${TAG}" ]; then
         TAG="${CI_DEFAULT_BRANCH}"
       fi
-      # prepare TAG if it was triggered with CI_COMMIT_TAG
+      
       if [ -n "${CI_COMMIT_TAG}" ]; then
-        TAG=$(echo "${TAG}"| sed 's/^v//' | cut -d '.' -f -2)
+        TAG=$(echo "${TAG}" | sed 's/^v//' | cut -d '.' -f -2)
       fi
-      module_tags=("${TAG}")
 
       if [ "${CI_PIPELINE_SOURCE}" == "schedule" ]; then
         SCAN_SEVERAL_LASTEST_RELEASES="true"
       fi
-      echo "Getting tags to scan"
-      # Check if provided tag is a semver minor, and if so - get image from prod registry
-      if echo "${TAG}" | grep -q "[0-9]*\.[0-9]*"; then
-        module_tags=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v${TAG}\.[0-9]*" | sort -V -r | head -n 1))
-      fi
-      if [ "${SCAN_SEVERAL_LASTEST_RELEASES}" == "true" ]; then
-        # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get several latest
-        releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r))
-        latest_minor_releases=($(printf '%s\n' "${releases[@]}"| cut -d "." -f -2 | uniq | head -n ${latest_releases_amount}))
-        for r in "${latest_minor_releases[@]}"; do
-          module_tags+=($(printf '%s\n' "${releases[@]}" | grep "${r}" | sort -V -r|head -n 1))
-        done
-      fi
-      echo "CVE Scan will be applied to the following tags of ${MODULE_NAME} module:"
-      echo "${module_tags[@]}"
+      
+      echo "Scanning parameters:"
+      echo "   ├─ Module: ${MODULE_NAME}"
+      echo "   ├─ Tag: ${TAG}"
+      echo "   ├─ Event type: ${CI_PIPELINE_SOURCE}"
+      echo "   ├─ Scan several releases: ${SCAN_SEVERAL_LASTEST_RELEASES:-false}"
+      echo "   └─ Number of releases: ${LATEST_RELEASES_AMOUNT:-3}"
+      echo ""
 
-      # Functions
-      trivy_scan() {
-        ${workdir}/bin/trivy i --policy "${TRIVY_POLICY_URL}" --cache-dir "${workdir}/bin/trivy_cache" --skip-db-update --skip-java-db-update --exit-code 0 --severity "${severity}" --ignorefile "${module_workdir}/.trivyignore" --format ${1} ${2} ${3} --quiet ${4} --username "${trivy_registry_user}" --password "${trivy_registry_pass}" --image-src remote
-      }
-
-      send_report() {
+    - |
+      echo "[ENV_SETUP] Setting up environment variables"
+      echo "=============================================="
+      
+      export TAG="${TAG}"
+      export CASE="external_modules"
+      export MODULE_NAME="${MODULE_NAME}"
+      
+      export PROD_REGISTRY="${PROD_REGISTRY}"
+      export PROD_REGISTRY_USER="${PROD_REGISTRY_USER}"
+      export PROD_REGISTRY_PASSWORD="${PROD_REGISTRY_PASSWORD}"
+      export DEV_REGISTRY="${DEV_REGISTRY}"
+      export DEV_REGISTRY_USER="${DEV_REGISTRY_USER}"
+      export DEV_REGISTRY_PASSWORD="${DEV_REGISTRY_PASSWORD}"
+      export DD_URL="${DD_URL}"
+      export DD_TOKEN="${DD_TOKEN}"
+      export COMMIT_SHA="${CI_COMMIT_SHA}"
+      export COMMIT_TAG="${CI_COMMIT_REF_NAME}"
+      export EVENT_NAME="${CI_PIPELINE_SOURCE}"
+      export SEVERITY="${SEVERITY:-UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL}"
+      export SCAN_SEVERAL_LATEST_RELEASES="${SCAN_SEVERAL_LASTEST_RELEASES:-false}"
+      export LATEST_RELEASES_AMOUNT="${LATEST_RELEASES_AMOUNT:-3}"
+      export TRIVY_REPORTS_LOG_OUTPUT="${TRIVY_REPORTS_LOG_OUTPUT:-true}"
+      export MODULE_PROD_REGISTRY_CUSTOM_PATH="${MODULE_PROD_REGISTRY_CUSTOM_PATH:-}"
+      export MODULE_DEV_REGISTRY_CUSTOM_PATH="${MODULE_DEV_REGISTRY_CUSTOM_PATH:-}"
+      
+      # Рабочая директория
+      export WORKDIR="${WORKDIR}"
+      
+      echo "Environment variables setup completed successfully"
         echo ""
-        echo " Uploading trivy ${1} report for image \"${IMAGE_NAME}\" of \"${MODULE_NAME}\" module"
-        echo ""
-        curl -s -S -o /dev/null --fail-with-body -X POST \
-          --retry 5 \
-          --retry-delay 10 \
-          --retry-all-errors \
-          ${DD_URL}/api/v2/reimport-scan/ \
-          -H "accept: application/json" \
-          -H "Content-Type: multipart/form-data"  \
-          -H "Authorization: Token ${DD_TOKEN}" \
-          -F "auto_create_context=True" \
-          -F "minimum_severity=Info" \
-          -F "active=true" \
-          -F "verified=true" \
-          -F "scan_type=Trivy Scan" \
-          -F "close_old_findings=true" \
-          -F "do_not_reactivate=false" \
-          -F "push_to_jira=false" \
-          -F "file=@${2}" \
-          -F "product_type_name=External Modules" \
-          -F "product_name=$MODULE_NAME" \
-          -F "scan_date=${date_iso}" \
-          -F "engagement_name=${1}" \
-          -F "service=${MODULE_NAME} / ${IMAGE_NAME}" \
-          -F "group_by=component_name+component_version" \
-          -F "deduplication_on_engagement=false" \
-          -F "tags=external_module,module:${MODULE_NAME},image:${IMAGE_NAME},branch:${module_tag},${dd_short_release_tag},${dd_full_release_tag},${dd_default_branch_tag}" \
-          -F "test_title=[${MODULE_NAME}]: ${IMAGE_NAME}:${module_tag}" \
-          -F "version=${dd_image_version}" \
-          -F "build_id=${IMAGE_HASH}" \
-          -F "commit_hash=${CI_COMMIT_SHA}" \
-          -F "branch_tag=${module_tag}" \
-          -F "apply_tags_to_findings=true"
-      }
 
-      # Scan in loop for provided list of tags
-      for module_tag in ${module_tags[@]}; do
-        dd_default_branch_tag=""
-        dd_short_release_tag=""
-        dd_full_release_tag=""
-        dd_image_version="${module_tag}"
-        module_image="${DEV_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
-        trivy_registry_user="${DEV_REGISTRY_USER}"
-        trivy_registry_pass="${DEV_REGISTRY_PASSWORD}"
-        if [ "${module_tag}" == "${CI_DEFAULT_BRANCH}" ]; then
-          dd_default_branch_tag="default_branch"
-        fi
-        # If we are scanning release images - we need to redefine image path to prod registry
-        if echo "${module_tag}" | grep -q "^v[0-9]*\.[0-9]*\.[0-9]*" && [[ "${CI_PIPELINE_SOURCE}" != "merge_request_event" ]]; then
-          module_image="${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}"
-          trivy_registry_user="${PROD_REGISTRY_USER}"
-          trivy_registry_pass="${PROD_REGISTRY_PASSWORD}"
-          dd_short_release_tag="release:$(echo ${module_tag} | cut -d '.' -f -2 | sed 's/^v//')"
-          dd_full_release_tag="image_release_tag:${module_tag}"
-          dd_image_version="$(echo ${dd_short_release_tag} | sed 's/^release\://')"
-        fi
-        module_workdir="${workdir}/${MODULE_NAME}_${module_tag}"
-        module_reports="${module_workdir}/reports"
-        mkdir -p "${module_reports}"
-        touch ${module_workdir}/.trivyignore
-        echo "Image to check: ${module_image}:${module_tag}"
-        echo "Severity: ${severity}"
-        echo "----------------------------------------------"
-        echo ""
-        echo "Getting module image"
-        crane export "${module_image}:${module_tag}" "${MODULE_NAME}.tar"
-        tar xf "${MODULE_NAME}.tar" -C "${module_workdir}/"
-        echo "Preparing images list to scan"
-        digests=$(cat "${module_workdir}${IMAGES_DIGESTS_PATH}")
-        # Main module images to scan
-        digests=$(echo "${digests}"|jq --arg i "${MODULE_NAME}" --arg s "${module_tag}" '. += { ($i): ($s) }')
-        echo "Images to scan:"
-        echo "${digests}"
-        date_iso=$(date -I)
-        while read -r line; do
-          IMAGE_NAME=$(jq -rc '.key' <<< "${line}")
-          if [[ "${IMAGE_NAME}" == "trivy" ]]; then
-            continue
-          fi
-          # Set flag if additional image to use tag instead of hash
-          additional_image_detected=false
-          if [ "${IMAGE_NAME}" == "${MODULE_NAME}" ]; then
-            additional_image_detected=true
-          fi
-          echo ""
-          echo "----------------------------------------------"
-          echo "👾 Scaning image \"${IMAGE_NAME}\" of module \"${MODULE_NAME}\" for tag \"${module_tag}\""
-          echo ""
-          IMAGE_HASH="$(jq -rc '.value' <<< "${line}")"
-
-          if [ "${additional_image_detected}" == true ]; then
-            if [ "${TRIVY_REPORTS_LOG_OUTPUT}" != "false" ]; then
-              # CVE Scan
-              trivy_scan "table" "--scanners vuln" "" "${module_image}:${module_tag}"
-              # License scan
-              trivy_scan "table" "--scanners license --license-full" "" "${module_image}:${module_tag}"
-            fi
-            # CVE Scan
-            trivy_scan "json" "--scanners vuln" "--output ${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report.json" "${module_image}:${module_tag}"
-            # License scan
-            trivy_scan "json" "--scanners license --license-full" "--output ${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report_license.json" "${module_image}:${module_tag}"
-          else
-            if [ "${TRIVY_REPORTS_LOG_OUTPUT}" != "false" ]; then
-              # CVE Scan
-              trivy_scan "table" "--scanners vuln" "" "${module_image}@${IMAGE_HASH}"
-              # License scan
-              trivy_scan "table" "--scanners license --license-full" "" "${module_image}@${IMAGE_HASH}"
-            fi
-            # CVE Scan
-            trivy_scan "json" "--scanners vuln" "--output ${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report.json" "${module_image}@${IMAGE_HASH}"
-            # License scan
-            trivy_scan "json" "--scanners license --license-full" "--output ${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report_license.json" "${module_image}@${IMAGE_HASH}"
-          fi
-          echo "    Done"
-
-          send_report "CVE" "${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report.json"
-          send_report "License" "${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report_license.json"
-        done < <(jq -rc 'to_entries[]' <<< "${digests}")
-      done
-      rm -rf ${workdir}
+    # Запуск CVE скрипта
+    - |
+      echo "[SCRIPT_RUN] Starting CVE scanning for module ${MODULE_NAME} with tag ${TAG}"
+      echo "=================================================================================="
+      
+      "${WORKDIR}/scripts/cve_scan.sh"
+      
+      echo ""
+      echo "[SUCCESS] CVE scanning completed successfully!"
+      echo "==============================================="
