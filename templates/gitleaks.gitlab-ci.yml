@@ -131,6 +131,7 @@ gitleaks_full_scheduled:
 
 gitleaks_cleanup:
   stage: gitleaks_cleanup
+  before_script: []
   script:
     - echo "🧹 Cleaning up runner workspace..."
     - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz gitleaks.json || true
