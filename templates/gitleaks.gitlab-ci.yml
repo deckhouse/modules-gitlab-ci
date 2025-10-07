@@ -102,7 +102,7 @@ variables:
       
       # ========== Cleanup ==========
       echo "🧹 Cleaning up runner workspace..."
-      rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz gitleaks.json || true
+      rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz || true
 
   artifacts:
     when: always
