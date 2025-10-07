@@ -99,10 +99,10 @@ variables:
       else
         echo "✅ No leaks found."
       fi
-      
-      # ========== Cleanup ==========
-      echo "🧹 Cleaning up runner workspace..."
-      rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz || true
+
+  after_script:
+    - echo "🧹 Cleaning up runner workspace..."
+    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz || true
 
   artifacts:
     when: always
