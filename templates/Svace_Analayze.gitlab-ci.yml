@@ -298,7 +298,7 @@ variables:
 
       echo "Searching for current build artifacts on server by path: /${SVACE_ANALYZE_DIR}/${COMMIT_HASH}"
       if [[ $(send "[[ -d /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} ]] && echo true || echo false") == false ]]; then
-        warning "Specified commit directory doesn't exists on analyze server." && exit 0
+        warning "Specified commit directory doesn't exists on analyze server." && exit 1
       fi
 
       projects=$(send "find /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} \\( -type d -iname .svace-dir -o -iname *.tar.gz \\) -exec dirname {} \\;")
