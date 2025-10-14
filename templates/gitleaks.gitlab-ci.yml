@@ -81,7 +81,7 @@ variables:
           (if type=="object" and has("findings") then .findings
            elif type=="array" then .
            else [] end)[] | norm
-          | "• [\(.rule)] \(.file):\(.line) \(.commit[0:7] // "no-commit") https://'$CI_PROJECT_PATH'/blob/\(.commit)/\(.file)#L\(.line)"
+          | "• [\(.rule)] \(.file):\(.line) \(.commit[0:7] // "no-commit") '$CI_PROJECT_URL'/blob/\(.commit)/\(.file)#L\(.line)"
         ' gitleaks.json | head -n 200
         
         echo ""
