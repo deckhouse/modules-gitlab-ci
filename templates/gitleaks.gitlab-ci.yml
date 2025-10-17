@@ -1,0 +1,131 @@
+variables:
+  GITLEAKS_VERSION: "v8.28.0"
+
+.gitleaks_scan:
+  stage: gitleaks
+  before_script: []
+  script:
+    - |
+      set -euo pipefail
+      
+      # ========== Install Gitleaks ==========
+      echo "📥 Installing Gitleaks $GITLEAKS_VERSION..."
+      file_ver="${GITLEAKS_VERSION#v}"
+      arch="$(uname -m)"
+      case "$arch" in
+        x86_64|amd64)  pkg_arch="linux_x64" ;;
+        aarch64|arm64) pkg_arch="linux_arm64" ;;
+        *) echo "Unsupported arch: $arch"; exit 1 ;;
+      esac
+      
+      base="https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}"
+      tgz="gitleaks_${file_ver}_${pkg_arch}.tar.gz"
+      curl -sSL "$base/$tgz" -o gitleaks.tgz
+      tar -xzf gitleaks.tgz gitleaks
+      chmod +x gitleaks
+      mkdir -p "$HOME/.local/bin"
+      mv gitleaks "$HOME/.local/bin/"
+      export PATH="$HOME/.local/bin:$PATH"
+      gitleaks version
+      
+      # ========== Check for config ==========
+      if [[ -f "gitleaks.toml" ]]; then
+        CONFIG_ARG="-c gitleaks.toml"
+        echo "✅ Found config: gitleaks.toml"
+      else
+        CONFIG_ARG=""
+        echo "⚠️ Config file not found. Proceeding with default rules."
+      fi
+      
+      # ========== Run scan ==========
+      GITLEAKS_EXIT=0
+      if [[ "$SCAN_MODE" == "diff" ]]; then
+        echo "🕵️ Running in DIFF mode..."
+        git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --depth=1
+        BASE_SHA=$(git merge-base origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME HEAD || echo "")
+        if [[ -z "$BASE_SHA" ]]; then
+          echo "❌ BASE_SHA not found. Aborting."
+          exit 1
+        fi
+        echo "▶ Scanning diff: $BASE_SHA...HEAD"
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "$BASE_SHA...HEAD" || GITLEAKS_EXIT=$?
+      elif [[ "$SCAN_MODE" == "full" ]]; then
+        echo "🕵️ Running in FULL mode..."
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . || GITLEAKS_EXIT=$?
+      else
+        echo "❌ Unknown SCAN_MODE: $SCAN_MODE"
+        exit 1
+      fi
+      
+      echo "🔍 Gitleaks exit code: $GITLEAKS_EXIT"
+      
+      # ========== Parse and print results ==========
+      echo "📤 Parsing gitleaks.json for CI log output..."
+      echo "DEBUG: Checking gitleaks.json file..."
+      ls -lh gitleaks.json || echo "⚠️ gitleaks.json not found!"
+      
+      if [[ -s gitleaks.json ]]; then
+        COUNT=$(jq length gitleaks.json)
+        echo "❌ Leaks found: $COUNT"
+        echo ""
+        echo "DEBUG: Attempting to parse and display leaks..."
+        
+        jq -r '
+          def norm:
+            {
+              file: (.File // .file // .Target // .Location.File // "unknown"),
+              line: (.StartLine // .Line // .Location.StartLine // 0),
+              rule: (.RuleID // .Rule // .Description // "unknown"),
+              commit: (.Commit // .commit // "")
+            };
+          (if type=="object" and has("findings") then .findings
+           elif type=="array" then .
+           else [] end)[] | norm
+          | "• [\(.rule)] \(.file):\(.line) \(.commit[0:7] // "no-commit") '$CI_PROJECT_URL'/blob/\(.commit)/\(.file)#L\(.line)"
+        ' gitleaks.json | head -n 200
+        
+        echo ""
+        echo "DEBUG: Finished displaying leaks"
+        
+        # Fail the job if leaks were found
+        if [[ "$COUNT" -gt 0 ]]; then
+          echo ""
+          echo "❌ Pipeline failed due to $COUNT leak(s). Review gitleaks.json artifact."
+          exit 1
+        fi
+      else
+        echo "✅ No leaks found."
+      fi
+
+  after_script:
+    - echo "🧹 Cleaning up runner workspace..."
+    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz || true
+
+  artifacts:
+    when: always
+    paths:
+      - gitleaks.json
+
+  allow_failure: false
+
+gitleaks_diff:
+  extends: .gitleaks_scan
+  variables:
+    SCAN_MODE: "diff"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+gitleaks_full_manual:
+  extends: .gitleaks_scan
+  variables:
+    SCAN_MODE: "full"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+gitleaks_full_scheduled:
+  extends: .gitleaks_scan
+  variables:
+    SCAN_MODE: "full"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
