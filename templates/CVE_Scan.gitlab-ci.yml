@@ -166,7 +166,7 @@
             -d "{
             \"tags\": ["${tags_string}"],
             \"version\": \"${dd_image_version}\",
-            \"branch_tag\": \"${d8_tag}\"
+            \"branch_tag\": \"${dd_branch}\"
           }")
           if [ ${dd_eng_patch_response: -3} -eq 200 ]; then
             echo "Engagemet \"${dd_engagement_name}\" updated successfully"
