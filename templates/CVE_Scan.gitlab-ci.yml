@@ -159,9 +159,9 @@
             --retry 10 \
             --retry-delay 20 \
             --retry-all-errors \
-            "https://${DEFECTDOJO_HOST}/api/v2/engagements/${dd_engagement_id}/" \
+            "${DD_URL}/api/v2/engagements/${dd_engagement_id}/" \
             -H "accept: application/json" \
-            -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" \
+            -H "Authorization: Token ${DD_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{
             \"tags\": ["${tags_string}"],
