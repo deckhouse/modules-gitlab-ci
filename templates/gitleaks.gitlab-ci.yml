@@ -3,6 +3,8 @@ variables:
 
 .gitleaks_scan:
   stage: gitleaks
+  variables:
+    GIT_DEPTH: 0
   before_script: []
   script:
     - |
@@ -41,10 +43,12 @@ variables:
       GITLEAKS_EXIT=0
       if [[ "$SCAN_MODE" == "diff" ]]; then
         echo "🕵️ Running in DIFF mode..."
-        BASE_COMMIT=$(git rev-parse HEAD^1)
+        BASE_COMMIT="$CI_MERGE_REQUEST_DIFF_BASE_SHA"
+        HEAD_COMMIT="$CI_COMMIT_SHA"
         echo "▶ Base commit: $BASE_COMMIT"
-        echo "▶ Scanning range: ${BASE_COMMIT}..HEAD"
-        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "${BASE_COMMIT}..HEAD" || GITLEAKS_EXIT=$?
+        echo "▶ Head commit: $HEAD_COMMIT"
+        echo "▶ Scanning range: ${BASE_COMMIT}..${HEAD_COMMIT}"
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "${BASE_COMMIT}..${HEAD_COMMIT}" || GITLEAKS_EXIT=$?
       elif [[ "$SCAN_MODE" == "full" ]]; then
         echo "🕵️ Running in FULL mode..."
         gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . || GITLEAKS_EXIT=$?
