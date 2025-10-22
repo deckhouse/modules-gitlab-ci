@@ -43,11 +43,17 @@ variables:
       GITLEAKS_EXIT=0
       if [[ "$SCAN_MODE" == "diff" ]]; then
         echo "🕵️ Running in DIFF mode..."
-        BASE_COMMIT="$CI_MERGE_REQUEST_DIFF_BASE_SHA"
+        
+        # Use git merge-base to find the actual branch point
+        # CI_MERGE_REQUEST_DIFF_BASE_SHA can be stale, so we compute it ourselves
+        BASE_COMMIT=$(git merge-base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" "$CI_COMMIT_SHA")
         HEAD_COMMIT="$CI_COMMIT_SHA"
-        echo "▶ Base commit: $BASE_COMMIT"
+        
+        echo "▶ Target branch: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        echo "▶ Base commit (merge-base): $BASE_COMMIT"
         echo "▶ Head commit: $HEAD_COMMIT"
         echo "▶ Scanning range: ${BASE_COMMIT}..${HEAD_COMMIT}"
+        
         gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "${BASE_COMMIT}..${HEAD_COMMIT}" || GITLEAKS_EXIT=$?
       elif [[ "$SCAN_MODE" == "full" ]]; then
         echo "🕵️ Running in FULL mode..."
