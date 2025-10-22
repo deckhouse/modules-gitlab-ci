@@ -44,8 +44,6 @@ variables:
       if [[ "$SCAN_MODE" == "diff" ]]; then
         echo "🕵️ Running in DIFF mode..."
         
-        # Use git merge-base to find the actual branch point
-        # CI_MERGE_REQUEST_DIFF_BASE_SHA can be stale, so we compute it ourselves
         BASE_COMMIT=$(git merge-base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" "$CI_COMMIT_SHA")
         HEAD_COMMIT="$CI_COMMIT_SHA"
         
