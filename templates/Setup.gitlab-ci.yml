@@ -45,14 +45,15 @@ before_script:
     echo "MODULES_MODULE_TAG: ${MODULES_MODULE_TAG}"
   # Setup trdl
   - |
-    echo "=== Setup trdl ==="
-    export PATH=$PATH:~/bin
-    trdl_target_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
-    trdl_installed_version=$(trdl | tail -n 1 | sed -E 's/Version: v([0-9\.]+)/\1/')
-    if [[ "$trdl_installed_version" != "$trdl_target_version" ]]; then
-      curl -sSLO "https://tuf.trdl.dev/targets/releases/$trdl_target_version/linux-amd64/bin/trdl"
-      install -D trdl ~/bin/trdl
-      rm trdl
+    if ! command -v trdl; then
+      export PATH=$PATH:~/bin
+      trdl_target_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
+      trdl_installed_version=$(trdl | tail -n 1 | sed -E 's/Version: v([0-9\.]+)/\1/')
+      if [[ "$trdl_installed_version" != "$trdl_target_version" ]]; then
+        curl -sSLO "https://tuf.trdl.dev/targets/releases/$trdl_target_version/linux-amd64/bin/trdl"
+        install -D trdl ~/bin/trdl
+        rm trdl
+      fi
     fi
 
   # Setup werf
