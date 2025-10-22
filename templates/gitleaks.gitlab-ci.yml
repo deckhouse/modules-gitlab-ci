@@ -41,14 +41,10 @@ variables:
       GITLEAKS_EXIT=0
       if [[ "$SCAN_MODE" == "diff" ]]; then
         echo "🕵️ Running in DIFF mode..."
-        git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --depth=1
-        BASE_SHA=$(git merge-base origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME HEAD || echo "")
-        if [[ -z "$BASE_SHA" ]]; then
-          echo "❌ BASE_SHA not found. Aborting."
-          exit 1
-        fi
-        echo "▶ Scanning diff: $BASE_SHA...HEAD"
-        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "$BASE_SHA...HEAD" || GITLEAKS_EXIT=$?
+        BASE_COMMIT=$(git rev-parse HEAD^1)
+        echo "▶ Base commit: $BASE_COMMIT"
+        echo "▶ Scanning range: ${BASE_COMMIT}..HEAD"
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "${BASE_COMMIT}..HEAD" || GITLEAKS_EXIT=$?
       elif [[ "$SCAN_MODE" == "full" ]]; then
         echo "🕵️ Running in FULL mode..."
         gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . || GITLEAKS_EXIT=$?
