@@ -3,6 +3,8 @@ variables:
 
 .gitleaks_scan:
   stage: gitleaks
+  variables:
+    GIT_DEPTH: 0
   before_script: []
   script:
     - |
@@ -41,14 +43,16 @@ variables:
       GITLEAKS_EXIT=0
       if [[ "$SCAN_MODE" == "diff" ]]; then
         echo "🕵️ Running in DIFF mode..."
-        git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --depth=1
-        BASE_SHA=$(git merge-base origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME HEAD || echo "")
-        if [[ -z "$BASE_SHA" ]]; then
-          echo "❌ BASE_SHA not found. Aborting."
-          exit 1
-        fi
-        echo "▶ Scanning diff: $BASE_SHA...HEAD"
-        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "$BASE_SHA...HEAD" || GITLEAKS_EXIT=$?
+        
+        BASE_COMMIT=$(git merge-base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" "$CI_COMMIT_SHA")
+        HEAD_COMMIT="$CI_COMMIT_SHA"
+        
+        echo "▶ Target branch: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        echo "▶ Base commit (merge-base): $BASE_COMMIT"
+        echo "▶ Head commit: $HEAD_COMMIT"
+        echo "▶ Scanning range: ${BASE_COMMIT}..${HEAD_COMMIT}"
+        
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "${BASE_COMMIT}..${HEAD_COMMIT}" || GITLEAKS_EXIT=$?
       elif [[ "$SCAN_MODE" == "full" ]]; then
         echo "🕵️ Running in FULL mode..."
         gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . || GITLEAKS_EXIT=$?
