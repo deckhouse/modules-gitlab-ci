@@ -83,13 +83,13 @@
         SCAN_SEVERAL_LASTEST_RELEASES="true"
       fi
       echo "Getting tags to scan"
-      echo $MODULE_NAME
-      echo $TAG
-      echo $PROD_REGISTRY
-      echo $MODULE_PROD_REGISTRY_CUSTOM_PATH
-      echo $CI_PIPELINE_SOURCE
-      echo $CI_DEFAULT_BRANCH
-      echo $CI_COMMIT_TAG
+      echo "module name: ${MODULE_NAME:-"empty"}
+      echo "tag: ${TAG:-"empty"}
+      echo "prod registry: ${PROD_REGISTRY:-"empty"}
+      echo "module prod registry custom path: ${MODULE_PROD_REGISTRY_CUSTOM_PATH:-"empty"}
+      echo "ci pipeline source: ${CI_PIPELINE_SOURCE:-"empty"}
+      echo "ci default branch: ${CI_DEFAULT_BRANCH:-"empty"}
+      echo "ci commit tag: ${CI_COMMIT_TAG:-"empty"}
       # Check if provided tag is a semver minor, and if so - get image from prod registry
       if echo "${TAG}" | grep -q "[0-9]*\.[0-9]*"; then
         module_tags=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v${TAG}\.[0-9]*" | sort -V -r | head -n 1))
