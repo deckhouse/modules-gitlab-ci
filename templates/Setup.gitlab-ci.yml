@@ -73,6 +73,9 @@ before_script:
 
   # Add ssh keys
   - |
+    if [[ -n "${SOURCE_REPO_SSH_KEY_B64}" ]]; then
+      SOURCE_REPO_SSH_KEY=$(echo "${SOURCE_REPO_SSH_KEY_B64}" | base64 -d)
+    fi
     if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
 
       eval $(ssh-agent)
