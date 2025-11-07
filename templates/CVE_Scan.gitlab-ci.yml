@@ -84,7 +84,7 @@
       fi
       echo "Getting tags to scan"
       # Check if provided tag is a semver minor, and if so - get image from prod registry
-      if echo "${TAG}" | grep -q "[0-9]*\.[0-9]*"; then
+      if echo "${TAG}" | grep -qE "[0-9]+\.[0-9]+"; then
         module_tags=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v${TAG}\.[0-9]*" | sort -V -r | head -n 1))
       fi
       if [ "${SCAN_SEVERAL_LASTEST_RELEASES}" == "true" ]; then
@@ -100,7 +100,7 @@
 
       # Functions
       trivy_scan() {
-        ${workdir}/bin/trivy i --vex oci --show-suppressed --config-check "${TRIVY_POLICY_URL}" --cache-dir "${workdir}/bin/trivy_cache" --skip-db-update --skip-java-db-update --exit-code 0 --severity "${severity}" --ignorefile "${module_workdir}/.trivyignore" --format ${1} ${2} ${3} --quiet ${4} --username "${trivy_registry_user}" --password "${trivy_registry_pass}" --image-src remote
+        ${workdir}/bin/trivy i --timeout 15m --vex oci --show-suppressed --config-check "${TRIVY_POLICY_URL}" --cache-dir "${workdir}/bin/trivy_cache" --skip-db-update --skip-java-db-update --exit-code 0 --severity "${severity}" --ignorefile "${module_workdir}/.trivyignore" --format ${1} ${2} ${3} --quiet ${4} --username "${trivy_registry_user}" --password "${trivy_registry_pass}" --image-src remote
       }
 
       send_report() {
