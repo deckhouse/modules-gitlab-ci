@@ -7,16 +7,27 @@ variables:
 before_script:
   # Setup trdl
   - |
-    if ! command -v trdl; then
-      export PATH=$PATH:~/bin
-      trdl_target_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
-      trdl_installed_version=$(trdl | tail -n 1 | sed -E 's/Version: v([0-9\.]+)/\1/')
-      if [[ "$trdl_installed_version" != "$trdl_target_version" ]]; then
-        curl -sSLO "https://tuf.trdl.dev/targets/releases/$trdl_target_version/linux-amd64/bin/trdl"
-        install -D trdl ~/bin/trdl
-        rm trdl
-      fi
+    TRDL_ROOT="${HOME}/.trdl"
+    trdl_target_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
+    TRDL_BIN="${TRDL_ROOT}/releases/${trdl_target_version}/trdl"
+    if [[ ! -x "${TRDL_BIN}" ]]; then
+      mkdir -p "${TRDL_ROOT}/releases/${trdl_target_version}"
+      curl -sSLO "https://tuf.trdl.dev/targets/releases/${trdl_target_version}/linux-amd64/bin/trdl"
+      mv trdl "${TRDL_BIN}"
+      chmod +x "${TRDL_BIN}"
     fi
+    ln -sfn "releases/${trdl_target_version}" "${TRDL_ROOT}/current"
+    export PATH="${TRDL_ROOT}/current:${PATH}"
+    
+    echo "DEBUG: which trdl = $(which trdl)"
+    echo "DEBUG: ls -la ${TRDL_ROOT} ="
+    ls -la "${TRDL_ROOT}"
+    echo "DEBUG: ls -laL ${TRDL_ROOT}/current ="
+    ls -laL "${TRDL_ROOT}/current" || echo "ERROR: symlink not created!"
+    echo "DEBUG: trdl check (call without flags):"
+    trdl 2>&1 | head -3 || echo "ERROR: trdl not found in PATH!"
+    echo "DEBUG: test trdl command:"
+    trdl list 2>&1 | head -1 || echo "WARNING: trdl list does not work"
 
   # Setup werf
   - |
