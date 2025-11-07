@@ -41,10 +41,12 @@ before_script:
     echo "DEBUG: which trdl = $(which trdl)"
     echo "DEBUG: ls -la ${TRDL_ROOT} ="
     ls -la "${TRDL_ROOT}"
-    echo "DEBUG: ls -la ${TRDL_ROOT}/current ="
-    ls -la "${TRDL_ROOT}/current" || echo "ERROR: симлинк не создан!"
-    echo "DEBUG: trdl version check:"
-    trdl --version 2>&1 | head -1 || echo "ERROR: trdl не найден в PATH!"
+    echo "DEBUG: ls -laL ${TRDL_ROOT}/current ="
+    ls -laL "${TRDL_ROOT}/current" || echo "ERROR: symlink not created!"
+    echo "DEBUG: trdl check (call without flags):"
+    trdl 2>&1 | head -3 || echo "ERROR: trdl not found in PATH!"
+    echo "DEBUG: test trdl command:"
+    trdl list 2>&1 | head -1 || echo "WARNING: trdl list does not work"
 
   # Setup werf
   - |
