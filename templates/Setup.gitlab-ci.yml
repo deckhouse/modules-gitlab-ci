@@ -37,6 +37,14 @@ before_script:
     fi
     ln -sfn "releases/${trdl_target_version}" "${TRDL_ROOT}/current"
     export PATH="${TRDL_ROOT}/current:${PATH}"
+    
+    echo "DEBUG: which trdl = $(which trdl)"
+    echo "DEBUG: ls -la ${TRDL_ROOT} ="
+    ls -la "${TRDL_ROOT}"
+    echo "DEBUG: ls -la ${TRDL_ROOT}/current ="
+    ls -la "${TRDL_ROOT}/current" || echo "ERROR: симлинк не создан!"
+    echo "DEBUG: trdl version check:"
+    trdl --version 2>&1 | head -1 || echo "ERROR: trdl не найден в PATH!"
 
   # Setup werf
   - |
