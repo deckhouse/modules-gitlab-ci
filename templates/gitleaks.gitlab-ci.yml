@@ -30,13 +30,33 @@ variables:
       export PATH="$HOME/.local/bin:$PATH"
       gitleaks version
       
-      # ========== Check for config ==========
-      if [[ -f "gitleaks.toml" ]]; then
-        CONFIG_ARG="-c gitleaks.toml"
-        echo "✅ Found config: gitleaks.toml"
+      # ========== Setup centralized config ==========
+      # Download centralized config to temporary directory (safe for Werf/giterminism)
+      TMP_BASE_CONFIG="/tmp/gitleaks.base.toml"
+      CONFIG_URL="https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/gitleaks/config/gitleaks.base.toml"
+      
+      echo "📥 Downloading centralized config..."
+      if curl -sSLf "$CONFIG_URL" -o "$TMP_BASE_CONFIG"; then
+        echo "✅ Centralized config downloaded to $TMP_BASE_CONFIG"
       else
+        echo "⚠️  Warning: Failed to download centralized config from $CONFIG_URL"
+        echo "    Falling back to default Gitleaks rules"
+        TMP_BASE_CONFIG=""  # Empty to skip using base config
+      fi
+      
+      # ========== Check for optional local config ==========
+      if [[ -f ".gitleaks.toml" ]]; then
+        # Local config exists - it should extend the centralized one
+        CONFIG_ARG="-c .gitleaks.toml"
+        echo "✅ Found local config: .gitleaks.toml (should extend base config)"
+      elif [[ -n "$TMP_BASE_CONFIG" && -f "$TMP_BASE_CONFIG" ]]; then
+        # Use centralized config only
+        CONFIG_ARG="-c $TMP_BASE_CONFIG"
+        echo "🔹 Using centralized config only (no local customization)"
+      else
+        # No config available - use default Gitleaks rules
         CONFIG_ARG=""
-        echo "⚠️ Config file not found. Proceeding with default rules."
+        echo "⚠️ No config available. Using default Gitleaks rules."
       fi
       
       # ========== Run scan ==========
@@ -103,7 +123,7 @@ variables:
 
   after_script:
     - echo "🧹 Cleaning up runner workspace..."
-    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz || true
+    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz /tmp/gitleaks.base.toml || true
 
   artifacts:
     when: always
