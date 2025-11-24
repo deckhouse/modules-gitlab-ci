@@ -1,5 +1,6 @@
 variables:
   GITLEAKS_VERSION: "v8.28.0"
+  GITLEAKS_BASE_CONFIG_URL: "https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/feature/gitleaks-centralized-config/gitleaks/config/gitleaks.base.toml"
 
 .gitleaks_scan:
   stage: gitleaks
@@ -33,7 +34,7 @@ variables:
       # ========== Setup centralized config ==========
       # Download centralized config to temporary directory (safe for Werf/giterminism)
       TMP_BASE_CONFIG="/tmp/gitleaks.base.toml"
-      CONFIG_URL="https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/gitleaks/config/gitleaks.base.toml"
+      CONFIG_URL="${GITLEAKS_BASE_CONFIG_URL}"
       
       echo "📥 Downloading centralized config..."
       if curl -sSLf "$CONFIG_URL" -o "$TMP_BASE_CONFIG"; then
