@@ -55,16 +55,16 @@ variables:
         else
           # No extend section - auto-merge with base config
           TMP_MERGED_CONFIG="/tmp/gitleaks.merged.toml"
-          cat > "$TMP_MERGED_CONFIG" <<EOF
-# Auto-generated merged config
-# Base config: $TMP_BASE_CONFIG
-# Local config: .gitleaks.toml
-
-[extend]
-useDefault = false
-path = "$TMP_BASE_CONFIG"
-
-EOF
+          cat > "$TMP_MERGED_CONFIG" <<'EOF'
+      # Auto-generated merged config
+      # Base config: $TMP_BASE_CONFIG
+      # Local config: .gitleaks.toml
+      
+      [extend]
+      useDefault = false
+      path = "$TMP_BASE_CONFIG"
+      
+      EOF
           cat .gitleaks.toml >> "$TMP_MERGED_CONFIG"
           CONFIG_ARG="-c $TMP_MERGED_CONFIG"
           echo "✅ Auto-merged local config with base config → $TMP_MERGED_CONFIG"
