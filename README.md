@@ -47,6 +47,40 @@ In `templates/multi-repo` the CI workflow differs from `basic` CI (which in `tem
 - [Refactor] All werf's caches and other artifacts (from `build` stage) are stored in Gitlab's registry (`${CI_REGISTRY_IMAGE}/${MODULES_MODULE_NAME}`) by default.
 - [Refactor] Images publishing (via `crane copy`) and module's self-registration processes moved to dedicated hidden job `.publish` (see `templates/multi-repo/Deploy.gitlab-ci.yml`).
 
+## Image and Binary Signing
+
+The templates now support signing of container images and ELF binaries within those images using werf's built-in signing capabilities.
+
+### Features
+
+- **Image signing**: Container image manifests are signed using certificates
+- **Binary signing**: ELF binaries within images are signed using GPG keys
+
+### Required Variables
+
+To enable signing, configure the following variables in your GitLab CI/CD project settings:
+
+#### Secret Variables (GitLab CI/CD Variables)
+
+- `WERF_SIGN_CERT` - Certificate for image signing (base64 encoded)
+- `WERF_SIGN_INTERMEDIATES` - Intermediate certificates (base64 encoded)
+- `WERF_SIGN_KEY` - Private key for signing (base64 encoded)
+- `VAULT_ROLE_ID` - Vault role ID for accessing GPG keys
+- `VAULT_SECRET_ID` - Vault secret ID for accessing GPG keys
+- `VAULT_ADDR` - Vault URL
+- `WERF_ELF_PGP_PRIVATE_KEY_FINGERPRINT` - GPG key fingerprint for binary signing
+- `WERF_ELF_PGP_PRIVATE_KEY_PASSPHRASE` - GPG key passphrase
+
+### Configuration
+
+The signing is enabled by default when using the templates. The following environment variables are automatically configured:
+
+```yaml
+WERF_SIGN_MANIFEST: "true"                             # Enable image manifest signing
+WERF_BSIGN_ELF_FILES: "1"                              # Enable ELF binary signing
+WERF_ANNOTATE_LAYERS_WITH_DM_VERITY_ROOT_HASH: "true"  # Enable dm-verity annotations
+```
+
 ## Variables
 
 `$MODULES_REGISTRY` - base URL for the registry, e.g. `registry.example.com`
