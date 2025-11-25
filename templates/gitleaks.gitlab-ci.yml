@@ -1,6 +1,6 @@
 variables:
   GITLEAKS_VERSION: "v8.28.0"
-  GITLEAKS_BASE_CONFIG_URL: "https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/gitleaks/config/gitleaks.base.toml"
+  GITLEAKS_BASE_CONFIG_URL: "https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/feature/gitleaks-centralized-config/gitleaks/config/gitleaks.base.toml"
 
 .gitleaks_scan:
   stage: gitleaks
