@@ -126,11 +126,17 @@ stages:
     # Setup werf
     - |
       if [[ -n "${WERF_SIGN_VERSION}" ]]; then
+        if [[ -z "${WERF_SIGN_PACKAGE_TOKEN}" ]]; then
+          echo "❌ ERROR: WERF_SIGN_PACKAGE_TOKEN is not set!"
+          echo "Please get token from delivery team and configure this variable in GitLab CI/CD settings -> Variables"
+          exit 1
+        fi
+
         echo "🔧 Downloading werf $WERF_SIGN_VERSION binary with signing support from internal repository..."
 
         curl --fail -sSL -o ~/bin/werf \
-        -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
-        "https://fox.flant.com/api/v4/projects/4052/packages/generic/werf/${WERF_SIGN_VERSION}/werf"
+        -H "PRIVATE-TOKEN: $WERF_SIGN_PACKAGE_TOKEN" \
+        "${CI_API_V4_URL}/projects/4052/packages/generic/werf/${WERF_SIGN_VERSION}/werf"
         type -a werf
         chmod +x ~/bin/werf
         export PATH=~/bin:$PATH
