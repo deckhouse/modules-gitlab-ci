@@ -135,15 +135,10 @@ stages:
         echo "🔧 Downloading werf $WERF_SIGN_VERSION binary with signing support from internal repository ${CI_API_V4_URL}..."
 
         mkdir -p ${HOME}/bin
-        echo "Listing ${HOME}/bin directory..."
-        ls -la ${HOME}/bin
-        echo "Listing ${TRDL_ROOT}/current directory..."
-        ls -la ${TRDL_ROOT}/current
 
         curl --fail -sSL -o ${HOME}/bin/werf \
         -H "PRIVATE-TOKEN: $WERF_SIGN_PACKAGE_TOKEN" \
         "${CI_API_V4_URL}/projects/4052/packages/generic/werf/${WERF_SIGN_VERSION}/werf"
-        type -a werf
         chmod +x ${HOME}/bin/werf
         export PATH=${HOME}/bin:$PATH
       else
@@ -153,6 +148,7 @@ stages:
       fi
 
       # Check werf version
+      type -a werf
       werf version
 
       source $(werf ci-env gitlab --as-file)
