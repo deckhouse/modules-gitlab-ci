@@ -129,7 +129,7 @@ stages:
         echo "🔧 Downloading werf $WERF_SIGN_VERSION binary with signing support from internal repository..."
 
         curl --fail -sSL -o ~/bin/werf \
-        -H "PRIVATE-TOKEN: $PACKAGE_TOKEN" \
+        -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
         "https://fox.flant.com/api/v4/projects/4052/packages/generic/werf/${WERF_SIGN_VERSION}/werf"
         type -a werf
         chmod +x ~/bin/werf
