@@ -134,12 +134,13 @@ stages:
 
         echo "🔧 Downloading werf $WERF_SIGN_VERSION binary with signing support from internal repository..."
 
-        curl --fail -sSL -o ~/bin/werf \
+        mkdir -p ${HOME}/bin
+        curl --fail -sSL -o ${HOME}/bin/werf \
         -H "PRIVATE-TOKEN: $WERF_SIGN_PACKAGE_TOKEN" \
         "${CI_API_V4_URL}/projects/4052/packages/generic/werf/${WERF_SIGN_VERSION}/werf"
         type -a werf
-        chmod +x ~/bin/werf
-        export PATH=~/bin:$PATH
+        chmod +x ${HOME}/bin/werf
+        export PATH=${HOME}/bin:$PATH
       else
         echo "Installing werf $WERF_VERSION via trdl..."
         trdl add werf https://tuf.werf.io 1 b7ff6bcbe598e072a86d595a3621924c8612c7e6dc6a82e919abe89707d7e3f468e616b5635630680dd1e98fc362ae5051728406700e6274c5ed1ad92bea52a2
