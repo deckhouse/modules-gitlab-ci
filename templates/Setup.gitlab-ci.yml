@@ -26,11 +26,17 @@ variables:
 before_script:
   # Setup trdl
   - |
-    trdl_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
-    curl -sSLO "https://tuf.trdl.dev/targets/releases/$trdl_version/linux-amd64/bin/trdl"
-    install -D trdl ~/bin/trdl
-    rm trdl
-    export PATH=$PATH:~/bin
+    TRDL_ROOT="${HOME}/.trdl"
+    trdl_target_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
+    TRDL_BIN="${TRDL_ROOT}/releases/${trdl_target_version}/trdl"
+    if [[ ! -x "${TRDL_BIN}" ]]; then
+      mkdir -p "${TRDL_ROOT}/releases/${trdl_target_version}"
+      curl -sSLO "https://tuf.trdl.dev/targets/releases/${trdl_target_version}/linux-amd64/bin/trdl"
+      mv trdl "${TRDL_BIN}"
+      chmod +x "${TRDL_BIN}"
+    fi
+    ln -sfn "releases/${trdl_target_version}" "${TRDL_ROOT}/current"
+    export PATH="${TRDL_ROOT}/current:${PATH}"
 
   # Setup werf
   - |
