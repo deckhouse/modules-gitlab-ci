@@ -47,27 +47,17 @@ variables:
       
       # ========== Check for optional local config ==========
       if [[ -f ".gitleaks.toml" ]]; then
-        # Local config exists - check if it already has [extend] section
+        # Local config exists - check if it has [extend] section
         if grep -q "^\[extend\]" .gitleaks.toml; then
-          # Already has extend section - use as is
+          # Has extend section - use as is
           CONFIG_ARG="-c .gitleaks.toml"
           echo "✅ Found local config with [extend] section - using as is"
         else
-          # No extend section - auto-merge with base config
-          TMP_MERGED_CONFIG="/tmp/gitleaks.merged.toml"
-          {
-            echo "# Auto-generated merged config"
-            echo "# Base config: $TMP_BASE_CONFIG"
-            echo "# Local config: .gitleaks.toml"
-            echo ""
-            echo "[extend]"
-            echo "useDefault = false"
-            echo "path = \"$TMP_BASE_CONFIG\""
-            echo ""
-          } > "$TMP_MERGED_CONFIG"
-          cat .gitleaks.toml >> "$TMP_MERGED_CONFIG"
-          CONFIG_ARG="-c $TMP_MERGED_CONFIG"
-          echo "✅ Auto-merged local config with base config → $TMP_MERGED_CONFIG"
+          # No extend section - warn and ignore, use base config only
+          echo "⚠️  WARNING: Local config file .gitleaks.toml exists but does not contain [extend] section"
+          echo "   We cannot be sure this is the expected extend configuration."
+          echo "   Ignoring local config file and using base config only."
+          CONFIG_ARG="-c $TMP_BASE_CONFIG"
         fi
       else
         # No local config - use centralized config only
@@ -139,7 +129,7 @@ variables:
 
   after_script:
     - echo "🧹 Cleaning up runner workspace..."
-    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz /tmp/gitleaks.base.toml /tmp/gitleaks.merged.toml || true
+    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz /tmp/gitleaks.base.toml || true
 
   artifacts:
     when: always
