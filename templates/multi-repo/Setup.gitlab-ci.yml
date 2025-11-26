@@ -183,13 +183,13 @@ stages:
           REQUIRED_SIGNING_VARS+=("WERF_ELF_PGP_PRIVATE_KEY_FINGERPRINT" "WERF_ELF_PGP_PRIVATE_KEY_PASSPHRASE")
         fi
 
-        if [[ -z "WERF_VAULT_AUTH_ROLE_ID" && -z "WERF_VAULT_AUTH_JWT" ]]; then
+        if [[ -z "${WERF_VAULT_AUTH_ROLE_ID}" && -z "${WERF_VAULT_AUTH_JWT}" ]]; then
           echo "❌ ERROR: Required secret variable WERF_VAULT_AUTH_ROLE_ID or WERF_VAULT_AUTH_JWT is not set!"
           echo "Please configure this variable in GitLab CI/CD settings -> Variables. See https://github.com/deckhouse/delivery-kit-sdk/blob/main/pkg/signver/hashivault/README.md for details."
           exit 1
         fi
 
-        if [[ -z "WERF_VAULT_AUTH_JWT" ]]; then
+        if [[ -z "${WERF_VAULT_AUTH_JWT}" ]]; then
           # if no JWT variable, then we need to require both WERF_VAULT_AUTH_ROLE_ID and WERF_VAULT_AUTH_SECRET_ID
           REQUIRED_SIGNING_VARS+=("WERF_VAULT_AUTH_ROLE_ID" "WERF_VAULT_AUTH_SECRET_ID")
         else
@@ -216,7 +216,7 @@ stages:
 
     - |
       if [[ ! -z "${BASE_IMAGES_VERSION}" ]]; then
-        echo "Downloading base_images.yml ${BASE_IMAGES_VERSION}"
+        echo "🔧 Downloading base_images.yml ${BASE_IMAGES_VERSION}"
         curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
       else
         echo "DO NOT download base_images.yml because BASE_IMAGES_VERSION is empty"
