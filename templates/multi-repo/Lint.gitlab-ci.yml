@@ -7,4 +7,5 @@
     - !reference [.setup, before_script]
   script:
     - |
+      echo "🔧 Running dmt lint..."
       dmt lint ./

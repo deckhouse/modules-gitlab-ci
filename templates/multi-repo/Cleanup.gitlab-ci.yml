@@ -10,14 +10,14 @@ Scheduled cleanup:
   script:
     - |
       if [[ -z "${NO_PRIVATE_REPO_PATCH}" ]]; then
-        echo "Apply git private repo patch... Set NO_PRIVATE_REPO_PATCH=1 to disable it"
+        echo "✅ Applying git private repo patch... Set NO_PRIVATE_REPO_PATCH=1 to disable it"
         export GOPRIVATE=${CI_SERVER_HOST}
         git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "git@${CI_SERVER_HOST}:"
       fi
 
-      echo "Managed images which will be preserved during cleanup procedure:"
+      echo "🔧 Managed images which will be preserved during cleanup procedure:"
       werf managed-images ls
-      echo "Starting cleanup..."
+      echo "🔧 Starting cleanup..."
       werf cleanup
 
 Auto cleanup:
@@ -37,16 +37,16 @@ Auto cleanup:
   script:
     - |
       if (( $(date +%s) % 10 == 0 )); then
-        echo "✨ Run auto cleanup"
+        echo "✨ Running auto cleanup..."
 
         if [[ -z "${NO_PRIVATE_REPO_PATCH}" ]]; then
-          echo "Apply git private repo patch... Set NO_PRIVATE_REPO_PATCH=1 to disable it"
+          echo "✅ Applying git private repo patch... Set NO_PRIVATE_REPO_PATCH=1 to disable it"
           export GOPRIVATE=${CI_SERVER_HOST}
           git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "git@${CI_SERVER_HOST}:"
         fi
 
-        echo "Managed images which will be preserved during cleanup procedure:"
+        echo "🔧 Managed images which will be preserved during cleanup procedure:"
         werf managed-images ls
-        echo "Starting cleanup..."
+        echo "🔧 Starting cleanup..."
         werf cleanup
       fi

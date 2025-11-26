@@ -60,6 +60,7 @@ DEV | Publish tags also to dev-registry:
   script:
     - |
       if [ "$DEBUG_CI" = "true" -o "$DEBUG_CI" = "1" ]; then
+        echo "👀 Debug mode is enabled. Printing environment variables..."
         printenv | sort
       fi
     # publish final images to dev registry and register module with $MODULES_MODULE_TAG

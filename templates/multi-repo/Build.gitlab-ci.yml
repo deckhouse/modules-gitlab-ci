@@ -24,7 +24,7 @@
         if [[ -n "${WERF_SIGN_CERT}" && -n "${WERF_SIGN_KEY}" ]]; then
           echo "✅ Image signing is enabled and configured"
         else
-          echo "❌ WARNING: Image signing is enabled but certificates are not configured"
+          echo "⚠️ WARNING: Image signing is enabled but certificates are not configured"
         fi
       fi
 
@@ -32,7 +32,7 @@
         if [[ -n "${WERF_ELF_PGP_PRIVATE_KEY_FINGERPRINT}" ]]; then
           echo "✅ Binary signing is enabled and configured"
         else
-          echo "❌ WARNING: Binary signing is enabled but GPG key is not configured"
+          echo "⚠️ WARNING: Binary signing is enabled but GPG key is not configured"
         fi
       fi
 

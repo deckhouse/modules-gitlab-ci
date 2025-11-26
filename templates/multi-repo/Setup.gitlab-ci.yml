@@ -116,6 +116,7 @@ stages:
       trdl_target_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
       TRDL_BIN="${TRDL_ROOT}/releases/${trdl_target_version}/trdl"
       if [[ ! -x "${TRDL_BIN}" ]]; then
+        echo "🔧 Installing trdl ${trdl_target_version}..."
         mkdir -p "${TRDL_ROOT}/releases/${trdl_target_version}"
         curl -sSLO "https://tuf.trdl.dev/targets/releases/${trdl_target_version}/linux-amd64/bin/trdl"
         mv trdl "${TRDL_BIN}"
@@ -133,7 +134,7 @@ stages:
           exit 1
         fi
 
-        echo "🔧 Downloading werf $WERF_SIGN_VERSION binary with signing support from internal repository ${CI_API_V4_URL}..."
+        echo "🔧 Downloading werf $WERF_SIGN_VERSION binary with signing support from internal repository..."
 
         mkdir -p ${HOME}/bin
 
@@ -143,7 +144,7 @@ stages:
         chmod +x ${HOME}/bin/werf
         export PATH=${HOME}/bin:$PATH
       else
-        echo "Installing werf $WERF_VERSION via trdl..."
+        echo "🔧 Installing werf $WERF_VERSION via trdl..."
         trdl add werf https://tuf.werf.io 1 b7ff6bcbe598e072a86d595a3621924c8612c7e6dc6a82e919abe89707d7e3f468e616b5635630680dd1e98fc362ae5051728406700e6274c5ed1ad92bea52a2
         source $(trdl use werf ${WERF_VERSION:-1.2 stable})
       fi
@@ -164,7 +165,7 @@ stages:
       if [[ "x${MODULES_REGISTRY_PASSWORD}" == "x" ]]; then
         MODULES_REGISTRY_PASSWORD="${CI_REGISTRY_PASSWORD}"
       fi
-      echo "Logging in to registry ${MODULES_REGISTRY}..."
+      echo "🔑 Logging in to registry ${MODULES_REGISTRY}..."
       werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
 
     - |
@@ -211,6 +212,7 @@ stages:
 
     # Setup dmt
     - |
+      echo "🔧 Installing Deckhouse Module Tool (dmt)..."
       trdl add dmt https://trrr.flant.dev/trdl-dmt/ 3 e77d785600a8c8612b84b93a5a2e4c48188d68f7478356d0708213e928bf67b024ed412e702dc32930da5c5bfc9b1c44be3ee7a292f923327815c91c6c3c3833
       source $(trdl use dmt 0 stable)
 
@@ -219,12 +221,13 @@ stages:
         echo "🔧 Downloading base_images.yml ${BASE_IMAGES_VERSION}"
         curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
       else
-        echo "DO NOT download base_images.yml because BASE_IMAGES_VERSION is empty"
+        echo "⚠️ DO NOT download base_images.yml because BASE_IMAGES_VERSION is empty"
       fi
 
     # Download deckhouse lib-helm archive
     - |
       if [[ -n "${DECKHOUSE_LIB_HELM_VERSION}"  ]]; then
+        echo "🔧 Downloading deckhouse lib-helm ${DECKHOUSE_LIB_HELM_VERSION}"
         mkdir charts
         curl --fail -sSLO https://github.com/deckhouse/lib-helm/releases/download/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}.tgz --output-dir ./charts
       fi
@@ -232,6 +235,7 @@ stages:
     # Add ssh keys
     - |
       if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
+        echo "🔧 Adding ssh keys for svace analyze..."
 
         eval $(ssh-agent)
         trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM

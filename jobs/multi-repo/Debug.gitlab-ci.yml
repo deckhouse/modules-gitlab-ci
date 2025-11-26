@@ -10,4 +10,5 @@ debug:printenv:
     - if: $DEBUG_CI == "true" || $DEBUG_CI == "1"
   script:
     - |
+      echo "👀 Debug mode is enabled. Printing environment variables..."
       printenv | sort
