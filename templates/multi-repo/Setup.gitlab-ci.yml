@@ -174,8 +174,6 @@ stages:
         # Variables that must be set in secrets CI/CD
         REQUIRED_SIGNING_VARS=(
           "VAULT_ADDR"
-          "VAULT_ROLE_ID"
-          "VAULT_SECRET_ID"
         )
 
         if [[ "${WERF_SIGN_MANIFEST}" == "1" ]]; then
@@ -183,6 +181,20 @@ stages:
         fi
         if [[ "${WERF_SIGN_ELF_FILES}" == "1" || "${WERF_BSIGN_ELF_FILES}" == "1" ]]; then
           REQUIRED_SIGNING_VARS+=("WERF_ELF_PGP_PRIVATE_KEY_FINGERPRINT" "WERF_ELF_PGP_PRIVATE_KEY_PASSPHRASE")
+        fi
+
+        if [[ -z "WERF_VAULT_AUTH_ROLE_ID" && -z "WERF_VAULT_AUTH_JWT" ]]; then
+          echo "❌ ERROR: Required secret variable WERF_VAULT_AUTH_ROLE_ID or WERF_VAULT_AUTH_JWT is not set!"
+          echo "Please configure this variable in GitLab CI/CD settings -> Variables. See https://github.com/deckhouse/delivery-kit-sdk/blob/main/pkg/signver/hashivault/README.md for details."
+          exit 1
+        fi
+
+        if [[ -z "WERF_VAULT_AUTH_JWT" ]]; then
+          # if no JWT variable, then we need to require both WERF_VAULT_AUTH_ROLE_ID and WERF_VAULT_AUTH_SECRET_ID
+          REQUIRED_SIGNING_VARS+=("WERF_VAULT_AUTH_ROLE_ID" "WERF_VAULT_AUTH_SECRET_ID")
+        else
+          # if JWT variable is set, then we need to require WERF_VAULT_AUTH_ROLE
+          REQUIRED_SIGNING_VARS+=("WERF_VAULT_AUTH_JWT" "WERF_VAULT_AUTH_ROLE")
         fi
 
         # Check secret variables
