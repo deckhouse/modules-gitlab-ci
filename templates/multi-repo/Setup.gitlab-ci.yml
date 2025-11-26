@@ -75,10 +75,11 @@ variables:
     value: ${CI_REGISTRY_IMAGE}/${MODULES_MODULE_NAME}
   WERF_VERSION: "2 stable"
 
+  # See:https://wiki.flant.ru/doc/podpisanie-obrazov-vneshnih-modulej-2JzTJwTPEe
   WERF_SIGN_VERSION: "v2.51.0+dk"
   WERF_SIGN_MANIFEST: "1"
-  WERF_SIGN_ELF_FILES: "1"
-  WERF_BSIGN_ELF_FILES: "1"
+  WERF_SIGN_ELF_FILES: "0"
+  WERF_BSIGN_ELF_FILES: "0"
   WERF_ANNOTATE_LAYERS_WITH_DM_VERITY_ROOT_HASH: "1"
 
 stages:
@@ -172,15 +173,17 @@ stages:
 
         # Variables that must be set in secrets CI/CD
         REQUIRED_SIGNING_VARS=(
-          "WERF_SIGN_CERT"
-          "WERF_SIGN_INTERMEDIATES"
-          "WERF_SIGN_KEY"
           "VAULT_ADDR"
           "VAULT_ROLE_ID"
           "VAULT_SECRET_ID"
-          "WERF_ELF_PGP_PRIVATE_KEY_FINGERPRINT"
-          "WERF_ELF_PGP_PRIVATE_KEY_PASSPHRASE"
         )
+
+        if [[ "${WERF_SIGN_MANIFEST}" == "1" ]]; then
+          REQUIRED_SIGNING_VARS+=("WERF_SIGN_CERT" "WERF_SIGN_INTERMEDIATES" "WERF_SIGN_KEY")
+        fi
+        if [[ "${WERF_SIGN_ELF_FILES}" == "1" || "${WERF_BSIGN_ELF_FILES}" == "1" ]]; then
+          REQUIRED_SIGNING_VARS+=("WERF_ELF_PGP_PRIVATE_KEY_FINGERPRINT" "WERF_ELF_PGP_PRIVATE_KEY_PASSPHRASE")
+        fi
 
         # Check secret variables
         for var in "${REQUIRED_SIGNING_VARS[@]}"; do
