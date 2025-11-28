@@ -78,10 +78,10 @@ variables:
         echo "▶ Head commit: $HEAD_COMMIT"
         echo "▶ Scanning range: ${BASE_COMMIT}..${HEAD_COMMIT}"
         
-        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "${BASE_COMMIT}..${HEAD_COMMIT}" || GITLEAKS_EXIT=$?
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "${BASE_COMMIT}..${HEAD_COMMIT}" --log-level debug || GITLEAKS_EXIT=$?
       elif [[ "$SCAN_MODE" == "full" ]]; then
         echo "🕵️ Running in FULL mode..."
-        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . || GITLEAKS_EXIT=$?
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-level debug || GITLEAKS_EXIT=$?
       else
         echo "❌ Unknown SCAN_MODE: $SCAN_MODE"
         exit 1
