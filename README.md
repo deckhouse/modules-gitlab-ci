@@ -1,4 +1,9 @@
-# gitlab-ci
+<p align="center">
+  <img alt="Deckhouse Kubernetes Platform" src="docs/images/logos/DH_sign_dark_mode.svg#gh-dark-mode-only" alt="Deckhouse Kubernetes Platform" />
+  <img alt="Deckhouse Kubernetes Platform" src="docs/images/logos/DH_sign_light_mode.svg#gh-light-mode-only" alt="Deckhouse Kubernetes Platform" />
+</p>
+
+# Deckhouse Modules GitLab-CI
 
 Helper functions for building and delivering Deckhouse modules using Gitlab CI.
 
