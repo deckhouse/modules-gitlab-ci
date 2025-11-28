@@ -1,5 +1,6 @@
 variables:
   GITLEAKS_VERSION: "v8.28.0"
+  GITLEAKS_BASE_CONFIG_URL: "https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/gitleaks/config/gitleaks.base.toml"
 
 .gitleaks_scan:
   stage: gitleaks
@@ -30,13 +31,38 @@ variables:
       export PATH="$HOME/.local/bin:$PATH"
       gitleaks version
       
-      # ========== Check for config ==========
-      if [[ -f "gitleaks.toml" ]]; then
-        CONFIG_ARG="-c gitleaks.toml"
-        echo "✅ Found config: gitleaks.toml"
+      # ========== Setup centralized config ==========
+      # Download centralized config to temporary directory (safe for Werf/giterminism)
+      TMP_BASE_CONFIG="/tmp/gitleaks.base.toml"
+      CONFIG_URL="${GITLEAKS_BASE_CONFIG_URL}"
+      
+      echo "📥 Downloading centralized config..."
+      if curl -sSLf "$CONFIG_URL" -o "$TMP_BASE_CONFIG"; then
+        echo "✅ Centralized config downloaded to $TMP_BASE_CONFIG"
       else
-        CONFIG_ARG=""
-        echo "⚠️ Config file not found. Proceeding with default rules."
+        echo "❌ Failed to download centralized config from $CONFIG_URL"
+        echo "   Cannot proceed without centralized config to avoid false positives."
+        exit 1
+      fi
+      
+      # ========== Check for optional local config ==========
+      if [[ -f ".gitleaks.toml" ]]; then
+        # Local config exists - check if it has [extend] section
+        if grep -q "^\[extend\]" .gitleaks.toml; then
+          # Has extend section - use as is
+          CONFIG_ARG="-c .gitleaks.toml"
+          echo "✅ Found local config with [extend] section - using as is"
+        else
+          # No extend section - warn and ignore, use base config only
+          echo "⚠️  WARNING: Local config file .gitleaks.toml exists but does not contain [extend] section"
+          echo "   We cannot be sure this is the expected extend configuration."
+          echo "   Ignoring local config file and using base config only."
+          CONFIG_ARG="-c $TMP_BASE_CONFIG"
+        fi
+      else
+        # No local config - use centralized config only
+        CONFIG_ARG="-c $TMP_BASE_CONFIG"
+        echo "🔹 Using centralized config only (no local customization)"
       fi
       
       # ========== Run scan ==========
@@ -52,10 +78,10 @@ variables:
         echo "▶ Head commit: $HEAD_COMMIT"
         echo "▶ Scanning range: ${BASE_COMMIT}..${HEAD_COMMIT}"
         
-        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "${BASE_COMMIT}..${HEAD_COMMIT}" || GITLEAKS_EXIT=$?
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-opts "${BASE_COMMIT}..${HEAD_COMMIT}" --log-level debug || GITLEAKS_EXIT=$?
       elif [[ "$SCAN_MODE" == "full" ]]; then
         echo "🕵️ Running in FULL mode..."
-        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . || GITLEAKS_EXIT=$?
+        gitleaks detect --no-banner --report-format json --report-path gitleaks.json $CONFIG_ARG --source . --log-level debug || GITLEAKS_EXIT=$?
       else
         echo "❌ Unknown SCAN_MODE: $SCAN_MODE"
         exit 1
@@ -103,7 +129,7 @@ variables:
 
   after_script:
     - echo "🧹 Cleaning up runner workspace..."
-    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz || true
+    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz /tmp/gitleaks.base.toml || true
 
   artifacts:
     when: always
