@@ -25,10 +25,12 @@
     TRIVY_POLICY_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
   script:
+    - |
+      env | sort
     # Creating workdir
     - |
-      echo "Creating workdir"
       workdir="trivy_scan"
+      echo "Creating workdir: ${workdir}"
       # remove workdir in case it was not removed on previous run
       rm -rf "${workdir}"
       mkdir "${workdir}"
@@ -66,31 +68,42 @@
     - |
       echo "Setting up registry path for module"
       PROD_REGISTRY_MODULE_BASEDIR="${PROD_REGISTRY}/${MODULE_PROD_REGISTRY_CUSTOM_PATH:-deckhouse/fe/modules}"
+      echo "PROD_REGISTRY_MODULE_BASEDIR: ${PROD_REGISTRY_MODULE_BASEDIR}"
       DEV_REGISTRY_MODULE_BASEDIR="${DEV_REGISTRY}/${MODULE_DEV_REGISTRY_CUSTOM_PATH:-sys/deckhouse-oss/modules}"
+      echo "DEV_REGISTRY_MODULE_BASEDIR: ${DEV_REGISTRY_MODULE_BASEDIR}"
       severity="${SEVERITY:-UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL}"
+      echo "severity: ${severity}"
       latest_releases_amount="${LATEST_RELEASES_AMOUNT:-3}"
+      echo "latest_releases_amount: ${latest_releases_amount}"
       # If input var TAG is empty - set to default branch
+      echo "TAG: ${TAG}"
       if [ -z "${TAG}" ]; then
         TAG="${CI_DEFAULT_BRANCH}"
+        echo "changed TAG: ${TAG}"
       fi
       # prepare TAG if it was triggered with CI_COMMIT_TAG
       if [ -n "${CI_COMMIT_TAG}" ]; then
         TAG=$(echo "${TAG}"| sed 's/^v//' | cut -d '.' -f -2)
+        echo "changed TAG: ${TAG}"
       fi
       module_tags=("${TAG}")
+      echo "module_tags: ${module_tags}"
 
       if [ "${CI_PIPELINE_SOURCE}" == "schedule" ]; then
         SCAN_SEVERAL_LASTEST_RELEASES="true"
+        echo "SCAN_SEVERAL_LASTEST_RELEASES: ${SCAN_SEVERAL_LASTEST_RELEASES}"
       fi
       echo "Getting tags to scan"
       # Check if provided tag is a semver minor, and if so - get image from prod registry
       if echo "${TAG}" | grep -qE "[0-9]+\.[0-9]+"; then
         module_tags=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v${TAG}\.[0-9]*" | sort -V -r | head -n 1))
+        echo "tag is a semver minor,module_tags: ${module_tags}"
       fi
       if [ "${SCAN_SEVERAL_LASTEST_RELEASES}" == "true" ]; then
         # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get several latest
         releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r))
         latest_minor_releases=($(printf '%s\n' "${releases[@]}"| cut -d "." -f -2 | uniq | head -n ${latest_releases_amount}))
+        echo "latest_minor_releases: ${latest_minor_releases}"
         for r in "${latest_minor_releases[@]}"; do
           module_tags+=($(printf '%s\n' "${releases[@]}" | grep "${r}" | sort -V -r|head -n 1))
         done
