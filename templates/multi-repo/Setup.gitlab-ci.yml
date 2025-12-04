@@ -76,7 +76,7 @@ variables:
   WERF_VERSION: "2 stable"
 
   # See:https://wiki.flant.ru/doc/podpisanie-obrazov-vneshnih-modulej-2JzTJwTPEe
-  WERF_SIGN_VERSION: "v2.51.0+dk"
+  # WERF_SIGN_VERSION: "v2.51.0+dk"
   WERF_SIGN_MANIFEST: "1"
   WERF_SIGN_ELF_FILES: "0"
   WERF_BSIGN_ELF_FILES: "0"
