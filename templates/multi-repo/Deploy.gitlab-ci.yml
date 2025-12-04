@@ -3,7 +3,7 @@
   script:
     - |
       if [[ "x${MODULES_REGISTRY}" == "x" || "x${MODULES_REGISTRY_LOGIN}" == "x" || "x${MODULES_REGISTRY_PASSWORD}" == "x" || "x${MODULES_REGISTRY_PATH}" == "x" ]]; then
-        echo "One or more required variables of source registry is empty: MODULES_REGISTRY, MODULES_REGISTRY_LOGIN, MODULES_REGISTRY_PASSWORD, MODULES_REGISTRY_PATH"
+        echo "❌ ERROR: One or more required variables of source registry is empty: MODULES_REGISTRY, MODULES_REGISTRY_LOGIN, MODULES_REGISTRY_PASSWORD, MODULES_REGISTRY_PATH"
         exit 5
       fi
 
@@ -16,16 +16,16 @@
     - |
       # Login to Gitlab registry just in case
       if [[ "x${MODULES_REGISTRY}" != "x${CI_REGISTRY}" && "x${CI_REGISTRY}" != "x" && "x${CI_REGISTRY_USER}" != "x" && "x${CI_REGISTRY_PASSWORD}" != "x" ]]; then
-        echo "Login to Gitlab ${CI_REGISTRY} just in case..."
+        echo "🔑 Logging in to Gitlab ${CI_REGISTRY} just in case..."
         werf cr login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
       fi
 
       # Login to source registry
-      echo "Login to source registry ${MODULES_REGISTRY}..."
+      echo "🔑 Logging in to source registry ${MODULES_REGISTRY}..."
       werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
 
       # Login to target registry
-      echo "Login to target registry ${MODULES_TARGET_REGISTRY}..."
+      echo "🔑 Logging in to target registry ${MODULES_TARGET_REGISTRY}..."
       werf cr login -u ${MODULES_TARGET_REGISTRY_LOGIN} -p ${MODULES_TARGET_REGISTRY_PASSWORD} ${MODULES_TARGET_REGISTRY}
     # generate MODULES_MODULE_TARGET
     - |
@@ -50,10 +50,10 @@
         IMAGE_DST="${MODULES_MODULE_TARGET}/${MODULES_MODULE_NAME}:${docker_tag}"
 
         if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
-          echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+          echo "💿 Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
           crane copy ${IMAGE_SRC} ${IMAGE_DST}
         else
-          echo "[DEBUG_CI_DRY_RUN] ✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+          echo "[👀 DEBUG_CI_DRY_RUN 👀] 💿 Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
         fi
       done
 
@@ -63,10 +63,10 @@
       IMAGE_DST="${MODULES_MODULE_TARGET}/${MODULES_MODULE_NAME}:${MODULES_MODULE_TAG}"
 
       if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
-        echo "✨ Pushing BUNDLE ${IMAGE_SRC} to ${IMAGE_DST}"
+        echo "💿 Pushing BUNDLE ${IMAGE_SRC} to ${IMAGE_DST}"
         crane copy ${IMAGE_SRC} ${IMAGE_DST}
       else
-        echo "[DEBUG_CI_DRY_RUN] ✨ Pushing BUNDLE ${IMAGE_SRC} to ${IMAGE_DST}"
+        echo "[👀 DEBUG_CI_DRY_RUN 👀] 💿 Pushing BUNDLE ${IMAGE_SRC} to ${IMAGE_DST}"
       fi
     # Release-channel image
     - |
@@ -74,21 +74,21 @@
       IMAGE_DST="${MODULES_MODULE_TARGET}/${MODULES_MODULE_NAME}/release:${MODULES_MODULE_TAG}"
 
       if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
-        echo "✨ Pushing RELEASE ${IMAGE_SRC} to ${IMAGE_DST}"
+        echo "💿 Pushing RELEASE ${IMAGE_SRC} to ${IMAGE_DST}"
         crane copy ${IMAGE_SRC} ${IMAGE_DST}
       else
-        echo "[DEBUG_CI_DRY_RUN] ✨ Pushing RELEASE ${IMAGE_SRC} to ${IMAGE_DST}"
+        echo "[👀 DEBUG_CI_DRY_RUN 👀] 💿 Pushing RELEASE ${IMAGE_SRC} to ${IMAGE_DST}"
       fi
     # Register module
     - |
       if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
-        echo "✨ Register the module ${MODULES_MODULE_NAME} in ${MODULES_MODULE_TARGET} registry"
+        echo "🏁 Register the module ${MODULES_MODULE_NAME} in ${MODULES_MODULE_TARGET} registry"
         crane append \
           --oci-empty-base \
           --new_layer "" \
           --new_tag "${MODULES_MODULE_TARGET}:${MODULES_MODULE_NAME}"
       else
-        echo "[DEBUG_CI_DRY_RUN] ✨ Register the module ${MODULES_MODULE_NAME} in ${MODULES_MODULE_TARGET} registry"
+        echo "[👀 DEBUG_CI_DRY_RUN 👀] 🏁 Register the module ${MODULES_MODULE_NAME} in ${MODULES_MODULE_TARGET} registry"
       fi
 
 .deploy:
@@ -105,10 +105,10 @@
     IMAGE_DST="${REPO}:${RELEASE_CHANNEL}"
 
     if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
-      echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+      echo "💿 Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
       crane copy "${IMAGE_SRC}" "${IMAGE_DST}"
     else
-      echo "[DEBUG_CI_DRY_RUN] ✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+      echo "[👀 DEBUG_CI_DRY_RUN 👀] 💿 Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
     fi
 
 .deploy_prod_rules:
@@ -136,6 +136,7 @@
   script:
     - |
       if [ "$DEBUG_CI" = "true" -o "$DEBUG_CI" = "1" ]; then
+        echo "👀 Debug mode is enabled. Printing environment variables..."
         printenv | sort
       fi
     # publish final images to prod registry and register module with $MODULES_MODULE_TAG
