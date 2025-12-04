@@ -15,6 +15,7 @@ Scheduled cleanup:
         git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "git@${CI_SERVER_HOST}:"
       fi
 
+      echo "🔧 WERF_REPO: ${WERF_REPO}"
       echo "🔧 Managed images which will be preserved during cleanup procedure:"
       werf managed-images ls
       echo "🔧 Starting cleanup..."
@@ -45,6 +46,7 @@ Auto cleanup:
           git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "git@${CI_SERVER_HOST}:"
         fi
 
+        echo "🔧 WERF_REPO: ${WERF_REPO}"
         echo "🔧 Managed images which will be preserved during cleanup procedure:"
         werf managed-images ls
         echo "🔧 Starting cleanup..."
