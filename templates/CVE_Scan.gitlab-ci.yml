@@ -18,7 +18,7 @@
 
 .cve_scan:
   variables:
-    TRIVY_BIN_VERSION: "v0.63.0"
+    TRIVY_BIN_VERSION: "v0.67.2"
     TRIVY_REPO_ID: "2181"
     TRIVY_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-db:2"
     TRIVY_JAVA_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
