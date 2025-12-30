@@ -84,7 +84,7 @@
       fi
       echo "Getting tags to scan"
       # Check if provided tag is a semver minor, and if so - get image from prod registry
-      if echo "${TAG}" | grep -qE "[0-9]+\.[0-9]+"; then
+      if echo "${TAG}" | grep -qE "^[0-9]+\.[0-9]+"; then
         module_tags=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v${TAG}\.[0-9]*" | sort -V -r | head -n 1))
       fi
       if [ "${SCAN_SEVERAL_LASTEST_RELEASES}" == "true" ]; then
