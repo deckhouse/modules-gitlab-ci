@@ -40,7 +40,9 @@
       echo "Preparing DOCKER_CONFIG and login to registries"
       mkdir -p "${workdir}/docker"
       export DOCKER_CONFIG="${workdir}/docker"
+      echo "Logging as ${PROD_REGISTRY_USER} to ${PROD_REGISTRY}"
       echo ${PROD_REGISTRY_PASSWORD} | docker login --username="${PROD_REGISTRY_USER}" --password-stdin ${PROD_REGISTRY}
+      echo "Logging as ${DEV_REGISTRY_USER} to ${DEV_REGISTRY}"
       echo ${DEV_REGISTRY_PASSWORD} | docker login --username="${DEV_REGISTRY_USER}" --password-stdin ${DEV_REGISTRY}
       echo
       echo "======================================================="
@@ -69,28 +71,44 @@
       DEV_REGISTRY_MODULE_BASEDIR="${DEV_REGISTRY}/${MODULE_DEV_REGISTRY_CUSTOM_PATH:-sys/deckhouse-oss/modules}"
       severity="${SEVERITY:-UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL}"
       latest_releases_amount="${LATEST_RELEASES_AMOUNT:-3}"
+
+      echo "using prod registry module base dir: ${PROD_REGISTRY_MODULE_BASEDIR}"
+      echo "using dev registry module base dir: ${DEV_REGISTRY_MODULE_BASEDIR}"
+      echo "using severity: ${severity}"
+      echo "using latest releases amount: ${latest_releases_amount}"
+
       # If input var TAG is empty - set to default branch
       if [ -z "${TAG}" ]; then
+        echo "TAG is empty, setting to default branch: ${CI_DEFAULT_BRANCH}"
         TAG="${CI_DEFAULT_BRANCH}"
       fi
       # prepare TAG if it was triggered with CI_COMMIT_TAG
       if [ -n "${CI_COMMIT_TAG}" ]; then
         TAG=$(echo "${TAG}"| sed 's/^v//' | cut -d '.' -f -2)
+        echo "scanning from tag: ${TAG}"
       fi
       module_tags=("${TAG}")
 
       if [ "${CI_PIPELINE_SOURCE}" == "schedule" ]; then
+        echo "pipeline is scheduled, several latest releases will be scanned"
         SCAN_SEVERAL_LASTEST_RELEASES="true"
       fi
       echo "Getting tags to scan"
       # Check if provided tag is a semver minor, and if so - get image from prod registry
       if echo "${TAG}" | grep -qE "[0-9]+\.[0-9]+"; then
+        echo "TAG is a semver minor, getting image from prod registry"
+        echo "total images for module found: $(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | wc -l)"
+
         module_tags=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v${TAG}\.[0-9]*" | sort -V -r | head -n 1))
+        echo "selected images: ${module_tags[@]}"
       fi
       if [ "${SCAN_SEVERAL_LASTEST_RELEASES}" == "true" ]; then
+        echo "scanning several latest releases"
+
         # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get several latest
         releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r))
         latest_minor_releases=($(printf '%s\n' "${releases[@]}"| cut -d "." -f -2 | uniq | head -n ${latest_releases_amount}))
+        echo "this minor releases will be scanned: ${latest_minor_releases[@]}"
         for r in "${latest_minor_releases[@]}"; do
           module_tags+=($(printf '%s\n' "${releases[@]}" | grep "${r}" | sort -V -r|head -n 1))
         done
