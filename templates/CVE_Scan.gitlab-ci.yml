@@ -98,6 +98,7 @@
         echo "📊 TAG is a semver minor, image from prod registry will be used"
         echo "📈 Total images for module found: $(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | wc -l)"
 
+        echo "🔍 Trying to find tags to scan..."
         module_tags=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v${TAG}\.[0-9]*" | sort -V -r | head -n 1))
         echo "✅ Selected images: ${module_tags[@]}"
       fi
@@ -105,11 +106,12 @@
         echo "📚 Several latest releases will be scanned: ${latest_releases_amount}"
 
         # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get several latest
+        echo "🔍 Trying to find tags to scan for several latest releases..."
         releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r))
         latest_minor_releases=($(printf '%s\n' "${releases[@]}"| cut -d "." -f -2 | uniq | head -n ${latest_releases_amount}))
 
         for r in "${latest_minor_releases[@]}"; do
-          echo "➕ Adding image for minor release: ${r} to scan"
+          echo "📦 Adding image for minor release: ${r} to scan"
           module_tags+=($(printf '%s\n' "${releases[@]}" | grep "${r}" | sort -V -r|head -n 1))
         done
       fi
