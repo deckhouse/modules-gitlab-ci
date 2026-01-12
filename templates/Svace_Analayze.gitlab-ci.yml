@@ -16,6 +16,15 @@
     COMMIT_HASH: ${CI_COMMIT_SHA}
     SVACE_ANALYZE_DIR: "svace-analyze"
 
+  allow_failure:
+    exit_codes: 11
+
+  retry:
+    max: 1
+    exit_codes:
+      - 12
+      - 137
+
   script:
     # Start ssh agent if it isn't running already
     - |
@@ -325,12 +334,3 @@
           send "find /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} -maxdepth 2 -type d -empty -delete"
           info "Cleanup completed successfully"
       done
-
-  allow_failure:
-    exit_codes:
-      - 11
-  retry:
-    max: 1
-    exit_codes:
-      - 137
-      - 12
