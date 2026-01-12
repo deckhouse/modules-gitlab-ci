@@ -1,22 +1,12 @@
-# variables:
-#   SVACER_URL:
-#     description: "url to svacer server"
-#     value: "${SVACER_URL}"
-#   SVACER_IMPORT_USER:
-#     description: "user to import with analyzing results to svacer server"
-#     value: "${SVACER_IMPORT_USER}"
-#   SVACER_IMPORT_PASSWORD:
-#     description: "svacer import user password"
-#     value: "${SVACER_IMPORT_PASSWORD}"
-#   PROJECT_GROUP:
-#     description: 'project group name for svacer import'
-#     value: "${CI_PROJECT_NAME}"
-#   IF_NO_GROUP:
-#     description: 'action to be performed if no project group is specified'
-#     value: "add"
-#   SKIP_UNREACHABLE_PROCEDURE_ANALYSIS:
-#     description: 'exclusion procedure option'
-#     value: "deps"
+# SVACE_ANALYZE_HOST - hostname of the svace analyze server
+# SVACE_ANALYZE_SSH_USER - svace analyze server ssh username
+# SVACE_ANALYZE_SSH_PRIVATE_KEY_B64 - svace analyze server ssh provate key encoded in base64
+# SVACER_URL - url to svacer server
+# SVACER_IMPORT_USER - user to import with analyzing results to svacer server
+# SVACER_IMPORT_PASSWORD - svacer import user password
+# PROJECT_GROUP - project group name for svacer import
+# IF_NO_GROUP - action to be performed if no project group is specified
+# SKIP_UNREACHABLE_PROCEDURE_ANALYSIS - exclusion procedure option
 
 
 .svace_analyze:
@@ -24,13 +14,7 @@
     PROJECT_GROUP: ${CI_PROJECT_NAME}
     COMMIT_REF_NAME: ${CI_COMMIT_REF_NAME}
     COMMIT_HASH: ${CI_COMMIT_SHA}
-    SVACE_ANALYZE_HOST: "${SVACE_ANALYZE_HOST}"
-    SVACE_ANALYZE_SSH_USER: "${SVACE_ANALYZE_SSH_USER}"
-    SVACE_ANALYZE_SSH_PRIVATE_KEY_B64: "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}"
     SVACE_ANALYZE_DIR: "svace-analyze"
-    SVACER_URL: "${SVACER_URL}"
-    SVACER_IMPORT_USER: "${SVACER_IMPORT_USER}"
-    SVACER_IMPORT_PASSWORD: "${SVACER_IMPORT_PASSWORD}"
 
   script:
     # Start ssh agent if it isn't running already
