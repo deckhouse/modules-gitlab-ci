@@ -207,7 +207,7 @@
           read import_task_id import_task_status <<< $(jq -r '(.task_id|tostring)+" "+.status' <<< ${response})
           if [[ -z "${import_task_id}" ]]; then
               error "Import task failed. Response: ${response}"
-              exit 1
+              exit 12
           fi
           info "Import task scheduled succesfully. Task id: ${import_task_id}"
 
@@ -280,7 +280,7 @@
 
       echo "Searching for current build artifacts on server by path: /${SVACE_ANALYZE_DIR}/${COMMIT_HASH}"
       if [[ $(send "[[ -d /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} ]] && echo true || echo false") == false ]]; then
-        warning "Specified commit directory doesn't exists on analyze server." && exit 1
+        warning "Specified commit directory doesn't exists on analyze server." && exit 11
       fi
 
       projects=$(send "find /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} \\( -type d -iname .svace-dir -o -iname *.tar.gz \\) -exec dirname {} \\;")
@@ -326,3 +326,11 @@
           info "Cleanup completed successfully"
       done
 
+  allow_failure:
+    exit_codes:
+      - 11
+  retry:
+    max: 1
+    exit_codes:
+      - 137
+      - 12
