@@ -1,0 +1,14 @@
+variables:
+  DEBUG_CI:
+    value: "false"
+    description: "Run debug job(s)"
+
+debug:printenv:
+  stage: build
+  rules:
+    # run if $DEBUG_CI variable is set to true
+    - if: $DEBUG_CI == "true" || $DEBUG_CI == "1"
+  script:
+    - |
+      echo "👀 Debug mode is enabled. Printing environment variables..."
+      printenv | sort

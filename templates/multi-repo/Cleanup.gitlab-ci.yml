@@ -1,0 +1,54 @@
+Scheduled cleanup:
+  stage: cleanup
+  timeout: 3h
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: on_success
+    - when: never
+  before_script:
+    - !reference [.setup, before_script]
+  script:
+    - |
+      if [[ -z "${NO_PRIVATE_REPO_PATCH}" ]]; then
+        echo "✅ Applying git private repo patch... Set NO_PRIVATE_REPO_PATCH=1 to disable it"
+        export GOPRIVATE=${CI_SERVER_HOST}
+        git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "git@${CI_SERVER_HOST}:"
+      fi
+
+      echo "🔧 WERF_REPO: ${WERF_REPO}"
+      echo "🔧 Managed images which will be preserved during cleanup procedure:"
+      werf managed-images ls
+      echo "🔧 Starting cleanup..."
+      werf cleanup
+
+Auto cleanup:
+  stage: cleanup
+  allow_failure: true
+  timeout: 10 minutes
+  rules:
+    # do not run if this job is explicitly disabled by user
+    - if: $AUTO_CLEANUP == "false" || $AUTO_CLEANUP == "0" || $AUTO_CLEANUP == ""
+      when: never
+    # do not run if there is a tag (release workflow)
+    - if: $CI_COMMIT_TAG
+      when: never
+    - !reference [.default_rules, rules]
+  before_script:
+    - !reference [.setup, before_script]
+  script:
+    - |
+      if (( $(date +%s) % 10 == 0 )); then
+        echo "✨ Running auto cleanup..."
+
+        if [[ -z "${NO_PRIVATE_REPO_PATCH}" ]]; then
+          echo "✅ Applying git private repo patch... Set NO_PRIVATE_REPO_PATCH=1 to disable it"
+          export GOPRIVATE=${CI_SERVER_HOST}
+          git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/".insteadOf "git@${CI_SERVER_HOST}:"
+        fi
+
+        echo "🔧 WERF_REPO: ${WERF_REPO}"
+        echo "🔧 Managed images which will be preserved during cleanup procedure:"
+        werf managed-images ls
+        echo "🔧 Starting cleanup..."
+        werf cleanup
+      fi

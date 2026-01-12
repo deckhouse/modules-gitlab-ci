@@ -40,8 +40,23 @@
       echo "Preparing DOCKER_CONFIG and login to registries"
       mkdir -p "${workdir}/docker"
       export DOCKER_CONFIG="${workdir}/docker"
-      echo ${PROD_REGISTRY_PASSWORD} | docker login --username="${PROD_REGISTRY_USER}" --password-stdin ${PROD_REGISTRY}
-      echo ${DEV_REGISTRY_PASSWORD} | docker login --username="${DEV_REGISTRY_USER}" --password-stdin ${DEV_REGISTRY}
+
+      PROD_AUTH_STRING=$(echo -n "$PROD_REGISTRY_USER:$PROD_REGISTRY_PASSWORD" | base64 -w 0)
+      DEV_AUTH_STRING=$(echo -n "$DEV_REGISTRY_USER:$DEV_REGISTRY_PASSWORD" | base64 -w 0)
+
+      # Create config.json file
+      cat > ${DOCKER_CONFIG}/config.json << EOF
+      {
+        "auths": {
+          "$PROD_REGISTRY": {
+            "auth": "$PROD_AUTH_STRING"
+          },
+          "${DEV_REGISTRY}": {
+            "auth": "$DEV_AUTH_STRING"
+          }
+        }
+      }
+      EOF
       echo
       echo "======================================================="
       echo

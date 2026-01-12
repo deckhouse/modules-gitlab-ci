@@ -1,0 +1,276 @@
+# Required CI/CD variables (must be defined in Gitlab's project/group settings):
+#   $DEV_MODULES_REGISTRY - dev registry URL (WITHOUT http/https prefix and path part) (like: registry.example.com)
+#   $DEV_MODULES_REGISTRY_PATH - dev registry path (to modules folder) part (like: sys/deckhouse-oss/modules)
+#   $DEV_MODULES_REGISTRY_LOGIN - login for dev registry (same as module name for most cases)
+#   $DEV_MODULES_REGISTRY_PASSWORD - password for dev registry
+
+#   $PROD_MODULES_REGISTRY - production registry URL (WITHOUT http/https prefix and path part)
+#   $PROD_MODULES_REGISTRY_PATH - prod registry path (to modules folder) part
+#   $PROD_MODULES_REGISTRY_LOGIN - login for prod registry
+#   $PROD_MODULES_REGISTRY_PASSWORD - password for prod registry
+
+
+#   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
+#   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
+#   SVACE_ANALYZE_SSH_PRIVATE_KEY_B64 - svace analyze server ssh private key
+
+#   Variables for sign (must be configured in GitLab CI/CD Variables):
+#   WERF_ELF_PGP_PRIVATE_KEY_FINGERPRINT - GPG key fingerprint
+#   WERF_ELF_PGP_PRIVATE_KEY_PASSPHRASE - GPG key passphrase
+#   VAULT_ADDR - URL to Vault address
+#   WERF_SIGN_CERT - certificate for signing images
+#   WERF_SIGN_INTERMEDIATES - intermediate certificates
+#   VAULT_ROLE_ID - ID role for access to Vault
+#   VAULT_SECRET_ID - secret ID for access to Vault
+#   WERF_SIGN_KEY - private key for signing
+#
+#   Variables configured in ci file:
+#   WERF_BSIGN_ELF_FILES=1 - enable binary signing
+#   WERF_SIGN_MANIFEST: "true" - enable image signing
+#   WERF_ANNOTATE_LAYERS_WITH_DM_VERITY_ROOT_HASH = true - add dm-verity hashes to layers
+#   WERF_SIGN_ELF_FILES: "1" - enable elf signing
+#
+#   PACKAGE_TOKEN - token for access to internal repository for downloading werf binary
+#
+#   The GPG key is located locally on the Gitlab runner
+#   Werf must be installed manually
+
+variables:
+  ##############################
+  # User default settings
+  ##############################
+
+  MODULES_MODULE_NAME: "${CI_PROJECT_NAME}"
+  MODULES_MODULE_TAG: ${CI_COMMIT_REF_NAME}
+  # Enable auto-cleanup job by default.
+  # `Auto cleanup` job is run randomly, only if current second is divisible by 10
+  AUTO_CLEANUP:
+    value: "true"
+    options:
+      - "true"
+      - "false"
+    description: "`Auto cleanup` job is run randomly (if enabled), only if current second is divisible by 10"
+
+  SVACE_ENABLED:
+    value: "false"
+    description: "Enable Svace static analysis"
+    options:
+      - "true"
+      - "false"
+
+  ##############################
+  # Internal default settings
+  ##############################
+  BASE_IMAGES_VERSION: v0.5.9
+  FORCE_CI:
+    value: "false"
+    options:
+      - "true"
+      - "false"
+    description: "Set to true if need force run workflow"
+
+  # use module's container registry (on Gitlab) as werf's intermediate/cache images registry (repo with all build-time artifacts (garbage))
+  WERF_REPO:
+    description: "Container registry storage address"
+    value: ${CI_REGISTRY_IMAGE}/${MODULES_MODULE_NAME}
+  WERF_VERSION: "2 stable"
+
+  # See:https://wiki.flant.ru/doc/podpisanie-obrazov-vneshnih-modulej-2JzTJwTPEe
+  # WERF_SIGN_VERSION: "v2.51.0+dk"
+  WERF_SIGN_MANIFEST: "1"
+  WERF_SIGN_ELF_FILES: "0"
+  WERF_BSIGN_ELF_FILES: "0"
+  WERF_ANNOTATE_LAYERS_WITH_DM_VERITY_ROOT_HASH: "1"
+
+stages:
+  - lint
+  - cleanup
+  - build
+  - deploy
+
+.default_rules:
+  rules:
+    # run if $FORCE_CI variable is set to true
+    - if: $FORCE_CI == "true" || $FORCE_CI == "1"
+    # run if there is a tag defined (module release workflow)
+    - if: $CI_COMMIT_TAG
+    # run if this is a merge request event
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    # run when push to default (main/master) branch (for example, when merge request is merged to `master` branch)
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # run when new branch is created and there are no opened merge requests for this branch and no commits to this branch yet (completely new branch from master/main)
+    # this rule is required for job `Publish merge request to DEV` to work properly
+    # - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && ($CI_MERGE_REQUEST_IID == null || $CI_MERGE_REQUEST_IID == "") && $CI_COMMIT_BEFORE_SHA == "0000000000000000000000000000000000000000"
+    # DO NOT run if this is a push to a branch and there are open merge requests (remove duplicated `branch` pipeline)
+    # - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+    #   when: never
+    # DO NOT run if this is a push (commits) to a branch (regardless of opened merge requests)
+    - if: $CI_COMMIT_BRANCH
+      when: never
+
+.setup:
+  before_script:
+    # Setup trdl
+    - |
+      TRDL_ROOT="${HOME}/.trdl"
+      trdl_target_version=$(curl -s https://tuf.trdl.dev/targets/channels/0/stable)
+      TRDL_BIN="${TRDL_ROOT}/releases/${trdl_target_version}/trdl"
+      if [[ ! -x "${TRDL_BIN}" ]]; then
+        echo "🔧 Installing trdl ${trdl_target_version}..."
+        mkdir -p "${TRDL_ROOT}/releases/${trdl_target_version}"
+        curl -sSLO "https://tuf.trdl.dev/targets/releases/${trdl_target_version}/linux-amd64/bin/trdl"
+        mv trdl "${TRDL_BIN}"
+        chmod +x "${TRDL_BIN}"
+      fi
+      ln -sfn "releases/${trdl_target_version}" "${TRDL_ROOT}/current"
+      export PATH="${TRDL_ROOT}/current:${PATH}"
+
+    # Setup werf
+    - |
+      if [[ -n "${WERF_SIGN_VERSION}" ]]; then
+        if [[ -z "${WERF_SIGN_PACKAGE_TOKEN}" ]]; then
+          echo "❌ ERROR: WERF_SIGN_PACKAGE_TOKEN is not set!"
+          echo "Please get token from delivery team and configure this variable in GitLab CI/CD settings -> Variables"
+          exit 1
+        fi
+
+        echo "🔧 Downloading werf $WERF_SIGN_VERSION binary with signing support from internal repository..."
+
+        mkdir -p ${HOME}/bin
+
+        curl --fail -sSL -o ${HOME}/bin/werf \
+        -H "PRIVATE-TOKEN: $WERF_SIGN_PACKAGE_TOKEN" \
+        "${CI_API_V4_URL}/projects/4052/packages/generic/werf/${WERF_SIGN_VERSION}/werf"
+        chmod +x ${HOME}/bin/werf
+        export PATH=${HOME}/bin:$PATH
+      else
+        echo "🔧 Installing werf $WERF_VERSION via trdl..."
+        trdl add werf https://tuf.werf.io 1 b7ff6bcbe598e072a86d595a3621924c8612c7e6dc6a82e919abe89707d7e3f468e616b5635630680dd1e98fc362ae5051728406700e6274c5ed1ad92bea52a2
+        source $(trdl use werf ${WERF_VERSION:-1.2 stable})
+      fi
+
+      # Check werf version
+      type -a werf
+      werf version
+
+      source $(werf ci-env gitlab --as-file)
+
+      # Login to gitlab registry by default
+      if [[ "x${MODULES_REGISTRY}" == "x" ]]; then
+        MODULES_REGISTRY="${CI_REGISTRY}"
+      fi
+      if [[ "x${MODULES_REGISTRY_LOGIN}" == "x" ]]; then
+        MODULES_REGISTRY_LOGIN="${CI_REGISTRY_USER}"
+      fi
+      if [[ "x${MODULES_REGISTRY_PASSWORD}" == "x" ]]; then
+        MODULES_REGISTRY_PASSWORD="${CI_REGISTRY_PASSWORD}"
+      fi
+      echo "🔑 Logging in to registry ${MODULES_REGISTRY}..."
+      werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
+
+    - |
+      if [[ -n "${WERF_SIGN_VERSION}" ]]; then
+        echo "🔐 Checking required signing variables..."
+
+        # Variables that must be set in secrets CI/CD
+        REQUIRED_SIGNING_VARS=(
+          "VAULT_ADDR"
+        )
+
+        if [[ "${WERF_SIGN_MANIFEST}" == "1" ]]; then
+          REQUIRED_SIGNING_VARS+=("WERF_SIGN_CERT" "WERF_SIGN_INTERMEDIATES" "WERF_SIGN_KEY")
+        fi
+        if [[ "${WERF_SIGN_ELF_FILES}" == "1" || "${WERF_BSIGN_ELF_FILES}" == "1" ]]; then
+          REQUIRED_SIGNING_VARS+=("WERF_ELF_PGP_PRIVATE_KEY_FINGERPRINT" "WERF_ELF_PGP_PRIVATE_KEY_PASSPHRASE")
+        fi
+
+        if [[ -z "${WERF_VAULT_AUTH_ROLE_ID}" && -z "${WERF_VAULT_AUTH_JWT}" ]]; then
+          echo "❌ ERROR: Required secret variable WERF_VAULT_AUTH_ROLE_ID or WERF_VAULT_AUTH_JWT is not set!"
+          echo "Please configure this variable in GitLab CI/CD settings -> Variables. See https://github.com/deckhouse/delivery-kit-sdk/blob/main/pkg/signver/hashivault/README.md for details."
+          exit 1
+        fi
+
+        if [[ -z "${WERF_VAULT_AUTH_JWT}" ]]; then
+          # if no JWT variable, then we need to require both WERF_VAULT_AUTH_ROLE_ID and WERF_VAULT_AUTH_SECRET_ID
+          REQUIRED_SIGNING_VARS+=("WERF_VAULT_AUTH_ROLE_ID" "WERF_VAULT_AUTH_SECRET_ID")
+        else
+          # if JWT variable is set, then we need to require WERF_VAULT_AUTH_ROLE
+          REQUIRED_SIGNING_VARS+=("WERF_VAULT_AUTH_JWT" "WERF_VAULT_AUTH_ROLE")
+        fi
+
+        # Check secret variables
+        for var in "${REQUIRED_SIGNING_VARS[@]}"; do
+          if [[ -z "${!var}" ]]; then
+            echo "❌ ERROR: Required secret variable $var is not set!"
+            echo "Please configure this variable in GitLab CI/CD settings -> Variables"
+            exit 1
+          else
+            echo "✅ Secret variable $var is configured"
+          fi
+        done
+      fi
+
+    # Setup dmt
+    - |
+      echo "🔧 Installing Deckhouse Module Tool (dmt)..."
+      trdl add dmt https://trrr.flant.dev/trdl-dmt/ 3 e77d785600a8c8612b84b93a5a2e4c48188d68f7478356d0708213e928bf67b024ed412e702dc32930da5c5bfc9b1c44be3ee7a292f923327815c91c6c3c3833
+      source $(trdl use dmt 0 stable)
+
+    - |
+      if [[ ! -z "${BASE_IMAGES_VERSION}" ]]; then
+        echo "🔧 Downloading base_images.yml ${BASE_IMAGES_VERSION}"
+        curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
+      else
+        echo "⚠️ DO NOT download base_images.yml because BASE_IMAGES_VERSION is empty"
+      fi
+
+    # Download deckhouse lib-helm archive
+    - |
+      if [[ -n "${DECKHOUSE_LIB_HELM_VERSION}"  ]]; then
+        echo "🔧 Downloading deckhouse lib-helm ${DECKHOUSE_LIB_HELM_VERSION}"
+        mkdir charts
+        curl --fail -sSLO https://github.com/deckhouse/lib-helm/releases/download/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}/deckhouse_lib_helm-${DECKHOUSE_LIB_HELM_VERSION}.tgz --output-dir ./charts
+      fi
+
+    # Add ssh keys
+    - |
+      if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
+        echo "🔧 Adding ssh keys for svace analyze..."
+
+        eval $(ssh-agent)
+        trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
+        export SSH_KNOWN_HOSTS=~/.ssh/known_hosts
+        mkdir -p ~/.ssh
+        touch ~/.ssh/known_hosts
+
+        if [[ -n "${SOURCE_REPO_SSH_KEY}" ]]; then
+          ssh-add - <<< "${SOURCE_REPO_SSH_KEY}"
+          if [[ -n "${SOURCE_REPO}" ]]; then
+            HOST=$(grep -oP '(?<=@)[^/:]+' <<< ${SOURCE_REPO})
+            HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
+            while IFS= read -r KEY_LINE; do
+              CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
+              if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
+                echo "$KEY_LINE" >> ~/.ssh/known_hosts
+              fi
+            done <<< "$HOST_KEYS"
+          fi
+        fi
+
+        if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
+          echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d | ssh-add -
+          if [[ -n "${SVACE_ANALYZE_HOST}" ]]; then
+            echo "Adding svace ssh key (ignoring errors)."
+            set +e
+            HOST=${SVACE_ANALYZE_HOST}
+            HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
+            while IFS= read -r KEY_LINE; do
+              CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
+              if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
+                echo "$KEY_LINE" >> ~/.ssh/known_hosts
+              fi
+            done <<< "$HOST_KEYS"
+            set -e
+          fi
+        fi
+      fi

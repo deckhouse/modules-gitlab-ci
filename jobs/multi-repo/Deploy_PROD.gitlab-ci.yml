@@ -1,0 +1,54 @@
+# https://docs.gitlab.com/ci/inputs/
+spec:
+  inputs:
+    editions:
+      type: array
+      description: List of module editions
+      default:
+        - ee
+        - fe
+        - se
+        - se-plus
+
+---
+
+PROD | Alpha:
+  extends: .deploy_prod
+  variables:
+    RELEASE_CHANNEL: alpha
+  parallel:
+    matrix:
+      - EDITION: $[[ inputs.editions ]]
+
+PROD | Beta:
+  extends: .deploy_prod
+  variables:
+    RELEASE_CHANNEL: beta
+  parallel:
+    matrix:
+      - EDITION: $[[ inputs.editions ]]
+
+PROD | EarlyAccess:
+  extends: .deploy_prod
+  variables:
+    RELEASE_CHANNEL: early-access
+  parallel:
+    matrix:
+      - EDITION: $[[ inputs.editions ]]
+
+PROD | Stable:
+  extends: .deploy_prod
+  variables:
+    RELEASE_CHANNEL: stable
+  parallel:
+    matrix:
+      - EDITION: $[[ inputs.editions ]]
+
+# because uppercased letters are ordered before lowercased, so put rock-solid job last as in stability level, not alphabetical
+PROD | rock-solid:
+  extends: .deploy_prod
+  variables:
+    RELEASE_CHANNEL: rock-solid
+  parallel:
+    matrix:
+      - EDITION: $[[ inputs.editions ]]

@@ -1,0 +1,145 @@
+.publish:
+  stage: deploy
+  script:
+    - |
+      if [[ "x${MODULES_REGISTRY}" == "x" || "x${MODULES_REGISTRY_LOGIN}" == "x" || "x${MODULES_REGISTRY_PASSWORD}" == "x" || "x${MODULES_REGISTRY_PATH}" == "x" ]]; then
+        echo "❌ ERROR: One or more required variables of source registry is empty: MODULES_REGISTRY, MODULES_REGISTRY_LOGIN, MODULES_REGISTRY_PASSWORD, MODULES_REGISTRY_PATH"
+        exit 5
+      fi
+
+      # set defaults for target registry variables from source registry variables
+      export MODULES_TARGET_REGISTRY="${MODULES_TARGET_REGISTRY:-$MODULES_REGISTRY}"
+      export MODULES_TARGET_REGISTRY_LOGIN="${MODULES_TARGET_REGISTRY_LOGIN:-$MODULES_REGISTRY_LOGIN}"
+      export MODULES_TARGET_REGISTRY_PASSWORD="${MODULES_TARGET_REGISTRY_PASSWORD:-$MODULES_REGISTRY_PASSWORD}"
+      export MODULES_TARGET_REGISTRY_PATH="${MODULES_TARGET_REGISTRY_PATH:-$MODULES_REGISTRY_PATH}"
+
+    - |
+      # Login to Gitlab registry just in case
+      if [[ "x${MODULES_REGISTRY}" != "x${CI_REGISTRY}" && "x${CI_REGISTRY}" != "x" && "x${CI_REGISTRY_USER}" != "x" && "x${CI_REGISTRY_PASSWORD}" != "x" ]]; then
+        echo "🔑 Logging in to Gitlab ${CI_REGISTRY} just in case..."
+        werf cr login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+      fi
+
+      # Login to source registry
+      echo "🔑 Logging in to source registry ${MODULES_REGISTRY}..."
+      werf cr login -u ${MODULES_REGISTRY_LOGIN} -p ${MODULES_REGISTRY_PASSWORD} ${MODULES_REGISTRY}
+
+      # Login to target registry
+      echo "🔑 Logging in to target registry ${MODULES_TARGET_REGISTRY}..."
+      werf cr login -u ${MODULES_TARGET_REGISTRY_LOGIN} -p ${MODULES_TARGET_REGISTRY_PASSWORD} ${MODULES_TARGET_REGISTRY}
+    # generate MODULES_MODULE_TARGET
+    - |
+      export MODULES_MODULE_TARGET="${MODULES_TARGET_REGISTRY}/${MODULES_TARGET_REGISTRY_PATH}"
+
+    # Module images
+    - |
+      jq -r '.Images | values[] | select (.Final==true) | .WerfImageName + " " + .DockerImageName + " " + .DockerTag + " " + .DockerImageDigest' < images_tags_werf.json | while read line; do
+        image="$(cut -d " " -f 1 <<< ${line})"
+        docker_image="$(cut -d " " -f 2 <<< ${line})"
+        docker_tag="$(cut -d " " -f 3 <<< ${line})"
+        shasum="$(cut -d " " -f 4 <<< ${line})"
+        name="$(tr '[:lower:]' '[:upper:]' <<< ${image} | sed 's|[-/]|_|g')"
+
+        # image: pg-images-17.3-bookworm-standard;
+        # name: PG_IMAGES_17.3_BOOKWORM_STANDARD;
+        # shasum: sha256:cd6daa30c94ec77b352156cbf1c05c8e98b44d1d3a47fa2b0a1083587247f730;
+        # docker_image: registry.flant.com/team/managed-services/managed-psql/managed-psql-d8/managed-postgres:ed0388a743d61926309d1023e02c639c1006f7b7b56d78161f32b0e0-1744971955188;
+        # docker_tag: ed0388a743d61926309d1023e02c639c1006f7b7b56d78161f32b0e0-1744971955188
+
+        IMAGE_SRC="${docker_image}"
+        IMAGE_DST="${MODULES_MODULE_TARGET}/${MODULES_MODULE_NAME}:${docker_tag}"
+
+        if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
+          echo "💿 Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+          crane copy ${IMAGE_SRC} ${IMAGE_DST}
+        else
+          echo "[👀 DEBUG_CI_DRY_RUN 👀] 💿 Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+        fi
+      done
+
+    # Bundle image
+    - |
+      IMAGE_SRC="$(jq -r '.Images."bundle".DockerImageName' images_tags_werf.json)"
+      IMAGE_DST="${MODULES_MODULE_TARGET}/${MODULES_MODULE_NAME}:${MODULES_MODULE_TAG}"
+
+      if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
+        echo "💿 Pushing BUNDLE ${IMAGE_SRC} to ${IMAGE_DST}"
+        crane copy ${IMAGE_SRC} ${IMAGE_DST}
+      else
+        echo "[👀 DEBUG_CI_DRY_RUN 👀] 💿 Pushing BUNDLE ${IMAGE_SRC} to ${IMAGE_DST}"
+      fi
+    # Release-channel image
+    - |
+      IMAGE_SRC="$(jq -r '.Images."release-channel-version".DockerImageName' images_tags_werf.json)"
+      IMAGE_DST="${MODULES_MODULE_TARGET}/${MODULES_MODULE_NAME}/release:${MODULES_MODULE_TAG}"
+
+      if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
+        echo "💿 Pushing RELEASE ${IMAGE_SRC} to ${IMAGE_DST}"
+        crane copy ${IMAGE_SRC} ${IMAGE_DST}
+      else
+        echo "[👀 DEBUG_CI_DRY_RUN 👀] 💿 Pushing RELEASE ${IMAGE_SRC} to ${IMAGE_DST}"
+      fi
+    # Register module
+    - |
+      if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
+        echo "🏁 Register the module ${MODULES_MODULE_NAME} in ${MODULES_MODULE_TARGET} registry"
+        crane append \
+          --oci-empty-base \
+          --new_layer "" \
+          --new_tag "${MODULES_MODULE_TARGET}:${MODULES_MODULE_NAME}"
+      else
+        echo "[👀 DEBUG_CI_DRY_RUN 👀] 🏁 Register the module ${MODULES_MODULE_NAME} in ${MODULES_MODULE_TARGET} registry"
+      fi
+
+.deploy:
+  stage: deploy
+  script:
+  - |
+    # set defaults for target registry variables from source registry variables
+    export MODULES_TARGET_REGISTRY="${MODULES_TARGET_REGISTRY:-$MODULES_REGISTRY}"
+    export MODULES_TARGET_REGISTRY_PATH="${MODULES_TARGET_REGISTRY_PATH:-$MODULES_REGISTRY_PATH}"
+
+    REPO="${MODULES_TARGET_REGISTRY}/${MODULES_TARGET_REGISTRY_PATH}/${MODULES_MODULE_NAME}/release"
+
+    IMAGE_SRC="${REPO}:${MODULES_MODULE_TAG}"
+    IMAGE_DST="${REPO}:${RELEASE_CHANNEL}"
+
+    if [[ -z "${DEBUG_CI_DRY_RUN}" ]]; then
+      echo "💿 Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+      crane copy "${IMAGE_SRC}" "${IMAGE_DST}"
+    else
+      echo "[👀 DEBUG_CI_DRY_RUN 👀] 💿 Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
+    fi
+
+.deploy_prod_rules:
+  rules:
+    # add MANUAL deploy job if $FORCE_CI variable is set
+    - if: $FORCE_CI == "true" || $FORCE_CI == "1"
+      when: manual
+    # do not run if some required variables is empty
+    - if: '$PROD_MODULES_REGISTRY == null || $PROD_MODULES_REGISTRY == "" || $EDITION == null || $EDITION == "" || $RELEASE_CHANNEL == null || $RELEASE_CHANNEL == ""'
+      when: never
+    # add MANUAL deploy job only if it is a tag defined (release workflow)
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+
+.deploy_prod:
+  stage: deploy
+  rules:
+    - !reference [.deploy_prod_rules, rules]
+  variables:
+    MODULES_TARGET_REGISTRY: $PROD_MODULES_REGISTRY
+    MODULES_TARGET_REGISTRY_LOGIN: $PROD_MODULES_REGISTRY_LOGIN
+    MODULES_TARGET_REGISTRY_PASSWORD: $PROD_MODULES_REGISTRY_PASSWORD
+    # path in PROD registry must be hardcoded
+    MODULES_TARGET_REGISTRY_PATH: deckhouse/${EDITION}/modules
+  script:
+    - |
+      if [ "$DEBUG_CI" = "true" -o "$DEBUG_CI" = "1" ]; then
+        echo "👀 Debug mode is enabled. Printing environment variables..."
+        printenv | sort
+      fi
+    # publish final images to prod registry and register module with $MODULES_MODULE_TAG
+    - !reference [.publish, script]
+    # make 'symlink' to published module tag for specified release-channel
+    - !reference [.deploy, script]
