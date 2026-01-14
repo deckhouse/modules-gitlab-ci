@@ -1,0 +1,174 @@
+stages:
+  - antivirus_scan
+
+variables:
+  AV_SCAN_MODULE:
+    description: "Enable antivirus scan"
+    value: "false"
+    options:
+      - "true"
+      - "false"
+  AV_SCAN_RESULTS_DIR: "scans"
+  AV_ACTIVE_RELEASES_TO_SCAN: "3"
+  AV_SCAN_BRANCH:
+    description: "If there is no empty value, then the scan will be started only for the value from this variable"
+    value: ""
+  AV_EDITIONS: "fe"
+  AV_MODULE_NAME: ${MODULES_MODULE_NAME}
+  AV_PROD_REGISTRY: ${PROD_REGISTRY}
+  AV_DEV_REGISTRY: ${DEV_REGISTRY}
+
+Antivirus scan get tags:
+  stage: antivirus_scan
+  tags:
+    - docker
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update && apt-get install -y git
+  script:
+    - |
+      export TAGS
+      if [[ -n "${AV_SCAN_BRANCH}" ]]; then
+        TAGS="${AV_SCAN_BRANCH}"
+      else
+        TAGS=$(git ls-remote --tags origin | grep -F tags/v | awk -F '/' '{print $3}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$')
+        TAGS_TO_SCAN=$(echo $TAGS | tr ' ' '\n' | sed 's/^v//' | sort -t. -k1,1n -k2,2n -k3,3n | awk -F. '{
+          key = $1 "." $2 # major.minor
+          if (key != prev && prev != "") {
+            print "v" prev "." maxp
+          }
+          if (key != prev) {
+            prev = key
+            maxp = $3
+          } else if ($3 > maxp) {
+            maxp = $3
+          }
+        }
+        END { if (prev != "") print "v" prev "." maxp }' | tail -${AV_ACTIVE_RELEASES_TO_SCAN})
+        TAGS=""
+        for edition in ${AV_EDITIONS}
+        do
+          for tag in $TAGS_TO_SCAN
+          do
+            TAGS+=$'\n'"$edition:$tag"
+          done
+        done
+        TAGS+=$'\n'"main"
+      fi
+
+      echo "Tags to scan:"
+      echo "$TAGS"
+
+      cat <<OUTER > generate-child-pipeline.sh
+      #!/bin/bash
+
+      AV_ANTIVIRUS_NAME=\$1
+      AV_ANTIVIRUS_PATH=\$2
+
+      cat <<'INNER' > child-pipeline-\${AV_ANTIVIRUS_NAME}.yml
+      stages:
+          - antivirus_scan
+
+      variables:
+          AV_SCAN_RESULTS_DIR: "${AV_SCAN_RESULTS_DIR}"
+
+      \${AV_ANTIVIRUS_NAME}-scan:
+          stage: antivirus_scan
+          tags:
+            - antivirus
+          parallel:
+            matrix:
+              - TAG: [\${TAGS_ARRAY}]
+          script:
+            - |
+              echo "Processing \$TAG"
+              export branch="\$TAG"
+              ref=\$(echo "\$branch" | awk -F':' '{ print \$2 }' | tr -d '\n')
+              if [ -z "\${ref}" ]; then
+                ref=\$(echo "\$branch" | tr -d '\n')
+              fi
+              ref_sanitized=\$(echo "\${ref}" | sed 's/[.\/]/-/g')
+              SCAN_TIME=\$(date '+%s')
+              SCAN_ID="\$SCAN_TIME-\$CI_PIPELINE_ID-\${ref_sanitized}"
+              
+              if [[ "\${ref}" =~ ^v?[0-9]+.[0-9]+.[0-9]+$ ]]; then
+                echo "registry read"
+                edition=\$(echo "\$branch" | tr -d '\n' | awk -F':' '{ print \$1 }')
+                SCAN_ID+="-\${edition}"
+                registry_image_path="/deckhouse/\${edition}/modules/${AV_MODULE_NAME}"
+                registry_host=$AV_PROD_REGISTRY
+              else
+                echo "registry dev"
+                registry_image_path="/sys/deckhouse-oss/modules/${AV_MODULE_NAME}"
+                registry_host=$AV_DEV_REGISTRY
+              fi
+              
+              CONTAINER_NAME=registry_\${AV_ANTIVIRUS_NAME}
+              SCAN_ID+="-\$CONTAINER_NAME"
+              echo "scan_id=\${SCAN_ID}"
+              
+              docker exec \${CONTAINER_NAME} scanner \${ref} \${registry_host}\${registry_image_path} \${SCAN_ID} module
+              
+              mkdir -p \${AV_SCAN_RESULTS_DIR}/\${SCAN_ID}
+              docker cp \${CONTAINER_NAME}:/\${AV_ANTIVIRUS_PATH}/scans/\${SCAN_ID}/scan_results_clean.md ./\${AV_SCAN_RESULTS_DIR}/\${SCAN_ID}/scan_results_clean.md
+              docker cp \${CONTAINER_NAME}:/\${AV_ANTIVIRUS_PATH}/scans/\${SCAN_ID}/scan_results_threats.md ./\${AV_SCAN_RESULTS_DIR}/\${SCAN_ID}/scan_results_threats.md
+              
+              if [ -f \${AV_SCAN_RESULTS_DIR}/\${SCAN_ID}/scan_results_threats.md ]; then
+                THREAT_COUNT=\$(sed -n 's/.*Images with threats | \([0-9]\+\) |.*/\1/p' \${AV_SCAN_RESULTS_DIR}/\${SCAN_ID}/scan_results_threats.md | head -1)
+                ERRORS_COUNT=\$(sed -n 's/.*Errors | \([0-9]\+\) |.*/\1/p' \${AV_SCAN_RESULTS_DIR}/\${SCAN_ID}/scan_results_threats.md | head -1)
+                if [ -n "\$THREAT_COUNT" ] && [ "\$THREAT_COUNT" -gt 0 ]; then
+                  echo "❌ THREATS DETECTED: \$THREAT_COUNT images contain threats!"
+                  exit 1
+                elif [ -n "\$ERRORS_COUNT" ] && [ "\$ERRORS_COUNT" -gt 0 ]; then
+                  echo "❌ ERRORS DETECTED: \$ERRORS_COUNT!"
+                  exit 1
+                else
+                  echo "✅ No threats detected (\$THREAT_COUNT)"
+                fi
+              else
+                echo "⚠️ The scan results file was not found"
+                exit 1
+              fi
+              echo "✅ \${CONTAINER_NAME} scan completed for \$branch"
+          artifacts:
+            paths:
+              - \${AV_SCAN_RESULTS_DIR}/
+            expire_in: 1 week
+            when: always
+      INNER
+      sed -i -e "s/\\\${AV_ANTIVIRUS_NAME}/\${AV_ANTIVIRUS_NAME}/g" child-pipeline-\${AV_ANTIVIRUS_NAME}.yml
+      sed -i -e "s/\\\${AV_ANTIVIRUS_PATH}/\${AV_ANTIVIRUS_PATH}/g" child-pipeline-\${AV_ANTIVIRUS_NAME}.yml
+      sed -i -e 's/\\\${TAGS_ARRAY}/$(echo "$TAGS" | grep -v '^$' | sed 's/^/"/;s/$/"/' | paste -sd,)/g' child-pipeline-\${AV_ANTIVIRUS_NAME}.yml
+      OUTER
+      chmod +x ./generate-child-pipeline.sh
+      cat generate-child-pipeline.sh
+
+      ./generate-child-pipeline.sh drweb drweb
+      ./generate-child-pipeline.sh kaspersky antivirus
+      cat child-pipeline-drweb.yml
+      cat child-pipeline-kaspersky.yml
+  rules:
+    - if: '$AV_SCAN_MODULE != "true"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  artifacts:
+    paths:
+      - child-pipeline-drweb.yml
+      - child-pipeline-kaspersky.yml
+
+Antivirus scan trigger:
+  stage: antivirus_scan
+  needs: ["Antivirus scan get tags"]
+  rules:
+    - if: '$AV_SCAN_MODULE != "true"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  trigger:
+    include:
+      - artifact: child-pipeline-drweb.yml
+        job: "Antivirus scan get tags"
+      - artifact: child-pipeline-kaspersky.yml
+        job: "Antivirus scan get tags"
+    strategy: depend
