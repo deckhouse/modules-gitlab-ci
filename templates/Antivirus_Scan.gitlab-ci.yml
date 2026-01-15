@@ -17,6 +17,7 @@ variables:
   AV_MODULE_NAME: ${MODULES_MODULE_NAME}
   AV_PROD_REGISTRY: ${PROD_REGISTRY}
   AV_DEV_REGISTRY: ${DEV_REGISTRY}
+  AV_N8N_LOOP_NOTIFIER_URL: ${N8N_LOOP_NOTIFIER_URL}
 
 Antivirus scan get tags:
   stage: antivirus_scan
@@ -172,3 +173,86 @@ Antivirus scan trigger:
       - artifact: child-pipeline-kaspersky.yml
         job: "Antivirus scan get tags"
     strategy: depend
+
+notify-failure:
+  stage: antivirus_scan
+  tags:
+    - docker
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update && apt-get install -y curl jq
+  rules:
+    - when: on_failure
+  needs:
+    - job: Antivirus scan get tags
+    - job: Antivirus scan trigger
+      optional: true
+  script:
+    - |
+      set -euo pipefail
+
+      API="${CI_API_V4_URL}"
+      PROJECT_ID="${CI_PROJECT_ID}"
+      PIPELINE_ID="${CI_PIPELINE_ID}"
+
+      # auth: prefer CI_JOB_TOKEN, fallback to personal/project token
+      AUTH_HEADER=()
+      if [[ -n "${CI_JOB_TOKEN:-}" ]]; then
+        AUTH_HEADER=(-H "JOB-TOKEN: ${CI_JOB_TOKEN}")
+      elif [[ -n "${GITLAB_API_TOKEN:-}" ]]; then
+        AUTH_HEADER=(-H "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}")
+      else
+        echo "No CI_JOB_TOKEN or GITLAB_API_TOKEN available"
+        exit 1
+      fi
+
+      # 1) Find the bridge job "Antivirus scan trigger" and extract downstream_pipeline.id
+      BRIDGES_JSON="$(curl -sf "${AUTH_HEADER[@]}" \
+        "${API}/projects/${PROJECT_ID}/pipelines/${PIPELINE_ID}/bridges?per_page=100")"
+
+      DOWNSTREAM_ID="$(echo "${BRIDGES_JSON}" | jq -r '
+        .[] | select(.name=="Antivirus scan trigger") | .downstream_pipeline.id // empty
+      ')"
+
+      if [[ -z "${DOWNSTREAM_ID}" ]]; then
+        echo "Downstream pipeline id not found for bridge 'Antivirus scan trigger'"
+        # Fallback: just send a generic alert
+        DOWNSTREAM_URL="${CI_PIPELINE_URL}"
+      else
+        DOWNSTREAM_URL="${CI_PROJECT_URL}/-/pipelines/${DOWNSTREAM_ID}"
+      fi
+
+      # 2) If downstream exists, fetch job statuses in the child pipeline
+      FAILED_LIST=""
+      if [[ -n "${DOWNSTREAM_ID}" ]]; then
+        JOBS_JSON="$(curl -sf "${AUTH_HEADER[@]}" \
+          "${API}/projects/${PROJECT_ID}/pipelines/${DOWNSTREAM_ID}/jobs?per_page=200")"
+
+        # Only take scan jobs; include failed/canceled
+        FAILED_LIST="$(echo "${JOBS_JSON}" | jq -r '
+          [ .[]
+            | select(.name|test("-scan$"))
+            | select(.status=="failed" or .status=="canceled")
+            | "- \(.name) (status: \(.status)) \(.web_url)"
+          ] | .[]?
+        ')"
+      fi
+
+      if [[ -z "${FAILED_LIST}" ]]; then
+        FAILED_LIST="- (could not determine the specific failed job(s); check the pipeline/child pipeline)"
+      fi
+
+      # 3) Render template
+      MSG=$(jq -n --arg pipeline "${CI_PIPELINE_URL}" \
+                 --arg child "${DOWNSTREAM_URL}" \
+                 --arg failed "${FAILED_LIST}" '
+        "🛑 GitLab Antivirus Scan Failed\n\n" +
+        "Failed jobs:\n" + $failed + "\n\n" +
+        "Pipeline: " + $pipeline + "\n" +
+        "Child pipeline: " + $child
+      ' -r)
+
+      # 4) Send to n8n
+      curl -sf -L -X POST "$AV_N8N_LOOP_NOTIFIER_URL" \
+        -H "Content-Type: application/json" \
+        --data "$(jq -n --arg type "ci_fail" --arg message "$MSG" '{type:$type,message:$message}')"
