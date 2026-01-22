@@ -40,7 +40,7 @@ DEV_REGISTRY_PASSWORD - password to log in to deckhouse dev registry
 The following variables should not be defined if their default values are ok for your needs.
 ```
 SCAN_SEVERAL_LASTEST_RELEASES - true/false. Whether to scan last several releases or not. For scheduled pipelines override will not work as value is always true.
-TRIVY_REPORTS_LOG_OUTPUT - Optional. true/false. Output Trivy reports into CI job log, default - true
+TRIVY_REPORTS_LOG_OUTPUT - 0 - no output, 1 - only CVE, 2 - CVE & License. Output Trivy reports into CI job log, default - 2
 LATEST_RELEASES_AMOUNT - Optional. Number of latest releases to scan. Default is: 3
 SEVERITY - Optional. Vulnerabilities severity to scan. Default is: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
 MODULE_PROD_REGISTRY_CUSTOM_PATH - Optional. Module custom path in prod registry. Example: flant/modules
