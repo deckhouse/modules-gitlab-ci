@@ -24,6 +24,7 @@
     TRIVY_JAVA_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
     TRIVY_POLICY_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
+    TRIVY_REPORTS_LOG_OUTPUT: "2"
   script:
     # Creating workdir
     - |
