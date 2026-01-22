@@ -9,7 +9,7 @@
 #   $DEV_REGISTRY - must be deckhouse dev registry, used to get dev images
 #   $DEV_REGISTRY_USER - username to log in to deckhouse dev registry
 #   $DEV_REGISTRY_PASSWORD - password to log in to deckhouse dev registry
-#   $TRIVY_REPORTS_LOG_OUTPUT - 0 - no output, 1 - only CVE, 2 - CVE & License. Output Trivy reports into CI job log, default - 2
+#   $TRIVY_REPORTS_LOG_OUTPUT - true/false. Output Trivy reports into CI job log, default - true
 #   $SCAN_SEVERAL_LASTEST_RELEASES - true/false. Whether to scan last several releases or not. For scheduled pipelines override will not work as value is always true.
 #   $LATEST_RELEASES_AMOUNT - Number of latest releases to scan. Default is: 3
 #   $SEVERITY - Vulnerabilities severity to scan. Default is: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
@@ -24,7 +24,6 @@
     TRIVY_JAVA_DB_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
     TRIVY_POLICY_URL: "${PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
     IMAGES_DIGESTS_PATH: "/images_digests.json"
-    TRIVY_REPORTS_LOG_OUTPUT: "2"
   script:
     # Creating workdir
     - |
@@ -246,26 +245,22 @@
           IMAGE_HASH="$(jq -rc '.value' <<< "${line}")"
 
           if [ "${additional_image_detected}" == true ]; then
-            if [ "${TRIVY_REPORTS_LOG_OUTPUT}" -ne 0 ]; then
+            if [ "${TRIVY_REPORTS_LOG_OUTPUT}" != "false" ]; then
               # CVE Scan
               trivy_scan "table" "--scanners vuln" "" "${module_image}:${module_tag}"
-              if [ "${TRIVY_REPORTS_LOG_OUTPUT}" -eq 2 ]; then
-                # License scan
-                trivy_scan "table" "--scanners license --license-full" "" "${module_image}:${module_tag}"
-              fi
+              # License scan
+              trivy_scan "table" "--scanners license --license-full" "" "${module_image}:${module_tag}"
             fi
             # CVE Scan
             trivy_scan "json" "--scanners vuln" "--output ${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report.json" "${module_image}:${module_tag}"
             # License scan
             trivy_scan "json" "--scanners license --license-full" "--output ${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report_license.json" "${module_image}:${module_tag}"
           else
-            if [ "${TRIVY_REPORTS_LOG_OUTPUT}" -ne 0 ]; then
+            if [ "${TRIVY_REPORTS_LOG_OUTPUT}" != "false" ]; then
               # CVE Scan
               trivy_scan "table" "--scanners vuln" "" "${module_image}@${IMAGE_HASH}"
-              if [ "${TRIVY_REPORTS_LOG_OUTPUT}" -eq 2 ]; then
-                # License scan
-                trivy_scan "table" "--scanners license --license-full" "" "${module_image}@${IMAGE_HASH}"
-              fi
+              # License scan
+              trivy_scan "table" "--scanners license --license-full" "" "${module_image}@${IMAGE_HASH}"
             fi
             # CVE Scan
             trivy_scan "json" "--scanners vuln" "--output ${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report.json" "${module_image}@${IMAGE_HASH}"
