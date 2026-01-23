@@ -40,9 +40,9 @@
       echo "🔐 Preparing DOCKER_CONFIG and login to registries"
       mkdir -p "${workdir}/docker"
       export DOCKER_CONFIG="${workdir}/docker"
-      echo "🔑 Logging as ${PROD_REGISTRY_USER} to ${PROD_REGISTRY}"
+      echo "🔑 Logging to ${PROD_REGISTRY}"
       echo ${PROD_REGISTRY_PASSWORD} | docker login --username="${PROD_REGISTRY_USER}" --password-stdin ${PROD_REGISTRY}
-      echo "🔑 Logging as ${DEV_REGISTRY_USER} to ${DEV_REGISTRY}"
+      echo "🔑 Logging to ${DEV_REGISTRY}"
       echo ${DEV_REGISTRY_PASSWORD} | docker login --username="${DEV_REGISTRY_USER}" --password-stdin ${DEV_REGISTRY}
       echo
       echo "======================================================="
