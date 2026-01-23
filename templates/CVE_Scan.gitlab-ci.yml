@@ -28,7 +28,7 @@
   script:
     # Creating workdir
     - |
-      echo "Creating workdir"
+      echo "🏗️ Creating workdir"
       workdir="trivy_scan"
       # remove workdir in case it was not removed on previous run
       rm -rf "${workdir}"
@@ -38,24 +38,26 @@
       echo
     # Preparing DOCKER_CONFIG and login to registries
     - |
-      echo "Preparing DOCKER_CONFIG and login to registries"
+      echo "🔐 Preparing DOCKER_CONFIG and login to registries"
       mkdir -p "${workdir}/docker"
       export DOCKER_CONFIG="${workdir}/docker"
+      echo "🔑 Logging to ${PROD_REGISTRY}"
       echo ${PROD_REGISTRY_PASSWORD} | docker login --username="${PROD_REGISTRY_USER}" --password-stdin ${PROD_REGISTRY}
+      echo "🔑 Logging to ${DEV_REGISTRY}"
       echo ${DEV_REGISTRY_PASSWORD} | docker login --username="${DEV_REGISTRY_USER}" --password-stdin ${DEV_REGISTRY}
       echo
       echo "======================================================="
       echo
     # Get Trivy
     - |
-      echo "Get Trivy"
-      echo "Trivy version: ${TRIVY_BIN_VERSION}"
+      echo "📥 Get Trivy"
+      echo "🔖 Trivy version: ${TRIVY_BIN_VERSION}"
       mkdir -p "${workdir}/bin/trivy-${TRIVY_BIN_VERSION}"
       curl -L -s --fail-with-body ${CI_API_V4_URL}/projects/${TRIVY_REPO_ID}/packages/generic/trivy-${TRIVY_BIN_VERSION}/${TRIVY_BIN_VERSION}/trivy -o ${workdir}/bin/trivy-${TRIVY_BIN_VERSION}/trivy
       chmod u+x ${workdir}/bin/trivy-${TRIVY_BIN_VERSION}/trivy
       ln -s ${PWD}/${workdir}/bin/trivy-${TRIVY_BIN_VERSION}/trivy ${workdir}/bin/trivy
 
-      echo "Updating Trivy Data Bases"
+      echo "🔄 Updating Trivy Data Bases"
       mkdir -p "${workdir}/bin/trivy_cache"
       ${workdir}/bin/trivy image --username "${PROD_REGISTRY_USER}" --password "${PROD_REGISTRY_PASSWORD}" --download-db-only --db-repository "${TRIVY_DB_URL}" --cache-dir "${workdir}/bin/trivy_cache"
       ${workdir}/bin/trivy image --username "${PROD_REGISTRY_USER}" --password "${PROD_REGISTRY_PASSWORD}" --download-java-db-only --java-db-repository "${TRIVY_JAVA_DB_URL}" --cache-dir "${workdir}/bin/trivy_cache"
@@ -65,38 +67,56 @@
 
     # Run Trivy scan
     - |
-      echo "Setting up registry path for module"
+      echo "⚙️ Setting up registry path for module"
       PROD_REGISTRY_MODULE_BASEDIR="${PROD_REGISTRY}/${MODULE_PROD_REGISTRY_CUSTOM_PATH:-deckhouse/fe/modules}"
       DEV_REGISTRY_MODULE_BASEDIR="${DEV_REGISTRY}/${MODULE_DEV_REGISTRY_CUSTOM_PATH:-sys/deckhouse-oss/modules}"
       severity="${SEVERITY:-UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL}"
       latest_releases_amount="${LATEST_RELEASES_AMOUNT:-3}"
+
+      echo "📦 Using prod registry module base dir: ${PROD_REGISTRY_MODULE_BASEDIR}"
+      echo "🧪 Using dev registry module base dir: ${DEV_REGISTRY_MODULE_BASEDIR}"
+
       # If input var TAG is empty - set to default branch
       if [ -z "${TAG}" ]; then
+        echo "🏷️ TAG is empty, setting to default branch: ${CI_DEFAULT_BRANCH}"
         TAG="${CI_DEFAULT_BRANCH}"
       fi
       # prepare TAG if it was triggered with CI_COMMIT_TAG
       if [ -n "${CI_COMMIT_TAG}" ]; then
         TAG=$(echo "${TAG}"| sed 's/^v//' | cut -d '.' -f -2)
+        echo "🏷️ Minor tag to scan: ${TAG}"
       fi
       module_tags=("${TAG}")
 
       if [ "${CI_PIPELINE_SOURCE}" == "schedule" ]; then
+        echo "⏰ Pipeline is scheduled, several latest releases will be scanned"
         SCAN_SEVERAL_LASTEST_RELEASES="true"
       fi
-      echo "Getting tags to scan"
+
+      echo "🔍 Getting tags to scan"
       # Check if provided tag is a semver minor, and if so - get image from prod registry
       if echo "${TAG}" | grep -qE "^[0-9]+\.[0-9]+$"; then
+        echo "📊 TAG is a semver minor, image from prod registry will be used"
+        echo "📈 Total images for module found: $(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | wc -l)"
+
+        echo "🔍 Trying to find tags to scan..."
         module_tags=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v${TAG}\.[0-9]*" | sort -V -r | head -n 1))
+        echo "✅ Selected images: ${module_tags[@]}"
       fi
       if [ "${SCAN_SEVERAL_LASTEST_RELEASES}" == "true" ]; then
+        echo "📚 Several latest releases will be scanned: ${latest_releases_amount}"
+
         # Get release tags by regexp, sort by sevmer desc, cut to get minor version, uniq and get several latest
+        echo "🔍 Trying to find tags to scan for several latest releases..."
         releases=($(crane ls "${PROD_REGISTRY_MODULE_BASEDIR}/${MODULE_NAME}" | grep "^v[0-9]*\.[0-9]*\.[0-9]*" | sort -V -r))
         latest_minor_releases=($(printf '%s\n' "${releases[@]}"| cut -d "." -f -2 | uniq | head -n ${latest_releases_amount}))
+
         for r in "${latest_minor_releases[@]}"; do
+          echo "📦 Adding image for minor release: ${r} to scan"
           module_tags+=($(printf '%s\n' "${releases[@]}" | grep "${r}" | sort -V -r|head -n 1))
         done
       fi
-      echo "CVE Scan will be applied to the following tags of ${MODULE_NAME} module:"
+      echo "🎯 CVE Scan will be applied to the following tags of ${MODULE_NAME} module:"
       echo "${module_tags[@]}"
 
       # Functions
@@ -116,7 +136,7 @@
           tags_string+=",\"${dd_short_release_tag}\",\"${dd_full_release_tag}\""
         fi
         echo ""
-        echo " Uploading trivy ${dd_branch} report for image \"${dd_image_name}\" of \"${dd_module_name}\" module"
+        echo "📤 Uploading trivy ${dd_branch} report for image \"${dd_image_name}\" of \"${dd_module_name}\" module"
         echo ""
         dd_upload_response=$(curl -sw "%{http_code}" -X POST \
           --retry 10 \
@@ -170,7 +190,7 @@
             \"branch_tag\": \"${dd_branch}\"
           }")
           if [ ${dd_eng_patch_response: -3} -eq 200 ]; then
-            echo "Engagemet \"${dd_engagement_name}\" updated successfully"
+            echo "✅ Engagemet \"${dd_engagement_name}\" updated successfully"
           else
             echo "!!!WARNING!!!"
             echo "Engagemet \"${dd_engagement_name}\" WAS NOT UPDATED"
@@ -215,14 +235,14 @@
         module_reports="${module_workdir}/reports"
         mkdir -p "${module_reports}"
         touch ${module_workdir}/.trivyignore
-        echo "Image to check: ${module_image}:${module_tag}"
-        echo "Severity: ${severity}"
+        echo "🔍 Image to check: ${module_image}:${module_tag}"
+        echo "⚠️ Severity: ${severity}"
         echo "----------------------------------------------"
         echo ""
-        echo "Getting module image"
+        echo "📥 Getting module image"
         crane export "${module_image}:${module_tag}" "${MODULE_NAME}.tar"
         tar xf "${MODULE_NAME}.tar" -C "${module_workdir}/"
-        echo "Preparing images list to scan"
+        echo "📋 Preparing images list to scan"
         digests=$(cat "${module_workdir}${IMAGES_DIGESTS_PATH}")
         # Main module images to scan
         digests=$(echo "${digests}"|jq --arg i "${MODULE_NAME}" --arg s "${module_tag}" '. += { ($i): ($s) }')
@@ -272,7 +292,7 @@
             # License scan
             trivy_scan "json" "--scanners license --license-full" "--output ${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report_license.json" "${module_image}@${IMAGE_HASH}"
           fi
-          echo "    Done"
+          echo "    ✅ Done"
 
           send_report "CVE" "${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report.json" "${MODULE_NAME}" "${IMAGE_NAME}"
           send_report "License" "${module_reports}/ext_${MODULE_NAME}_${IMAGE_NAME}_report_license.json" "${MODULE_NAME}" "${IMAGE_NAME}"
