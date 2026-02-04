@@ -15,7 +15,7 @@
 .merge_and_release:
   stage: post
   image:
-    name: registry.gitlab.com/gitlab-ci-utils/curl-jq:latest
+    name: stangirard/alpine-powerhouse:latest
     entrypoint: [""]
   variables:
     MERGE_RELEASE_CHANGELOG_PATH: "CHANGELOG"
