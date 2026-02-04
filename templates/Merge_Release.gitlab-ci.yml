@@ -15,7 +15,7 @@
 .merge_and_release:
   stage: post
   image:
-    name: debian:bookworm-slim
+    name: registry.gitlab.com/gitlab-ci-utils/curl-jq:latest
     entrypoint: [""]
   variables:
     MERGE_RELEASE_CHANGELOG_PATH: "CHANGELOG"
@@ -26,8 +26,6 @@
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /(^|,)ready-for-release(,|$)/
       when: on_success
     - when: never
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq git curl jq
   script:
     - |
       set -euo pipefail
