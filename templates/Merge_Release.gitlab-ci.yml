@@ -31,6 +31,8 @@
   script:
     - |
       set -euo pipefail
+      REPO_DIR=$(mktemp -d)
+      trap 'rm -rf "$REPO_DIR"' EXIT
       PR_TITLE="$CI_MERGE_REQUEST_TITLE"
       VERSION=$(echo "$PR_TITLE" | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1)
       [ -n "$VERSION" ] || { echo "Error: Could not extract version from MR title: $PR_TITLE"; exit 1; }
@@ -47,8 +49,8 @@
       git config --global user.email "gitlab-ci@gitlab.com"
       git config --global user.name "GitLab CI"
       REPO_URL="https://oauth2:${RELEASE_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-      git clone --branch "${MERGE_RELEASE_BASE_BRANCH}" --single-branch --depth 50 "$REPO_URL" /tmp/repo_release
-      cd /tmp/repo_release
+      git clone --branch "${MERGE_RELEASE_BASE_BRANCH}" --single-branch --depth 50 "$REPO_URL" "$REPO_DIR"
+      cd "$REPO_DIR"
       git fetch origin "${MERGE_RELEASE_BASE_BRANCH}"
       git reset --hard "origin/${MERGE_RELEASE_BASE_BRANCH}"
       if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
@@ -59,8 +61,8 @@
         echo "Tag $VERSION already exists, skipping tag creation."
       fi
       # Read changelog from clone (merged state)
-      CHANGELOG_FILE="/tmp/repo_release/${MERGE_RELEASE_CHANGELOG_PATH}/${VERSION}.yml"
-      DESC_FILE="/tmp/release_description.md"
+      CHANGELOG_FILE="$REPO_DIR/${MERGE_RELEASE_CHANGELOG_PATH}/${VERSION}.yml"
+      DESC_FILE="$REPO_DIR/release_description.md"
       if [ -f "$CHANGELOG_FILE" ]; then
         printf "## Changelog\n\n\`\`\`yaml\n%s\n\`\`\`\n" "$(cat "$CHANGELOG_FILE")" > "$DESC_FILE"
       else
