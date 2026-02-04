@@ -8,28 +8,16 @@
 #   TRANSLATE_BASE_BRANCH   - target branch for MR (default: main)
 #   RELEASE_TOKEN or CI_JOB_TOKEN - used to push and create MR (CI_JOB_TOKEN works in GitLab 15.9+)
 
-workflow:
-  rules:
-    - if: $CI_COMMIT_BRANCH
-    - if: $CI_COMMIT_TAG
-    - if: $CI_MERGE_REQUEST_IID
-    - if: $CI_PIPELINE_SOURCE == "web"
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_PIPELINE_SOURCE == "trigger"
-    - when: never
-
-.translate_changelog_rules:
-  rules:
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
-
 .translate_and_create_mr:
-  stage: .pre
+  stage: pre
   image:
     name: python:3.11-slim
     entrypoint: [""]
   variables:
     TRANSLATE_CHANGELOG_PATH: "CHANGELOG"
     TRANSLATE_BASE_BRANCH: "main"
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   before_script:
     - apt-get update -qq && apt-get install -y -qq git curl jq
     - pip install --no-cache-dir deep-translator packaging
@@ -150,5 +138,3 @@ workflow:
           "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests" \
           | python3 -c "import sys,json; d=json.load(sys.stdin); print('Created MR !'+str(d.get('iid','')))"
       echo "Translate changelog and create MR done."
-  extends:
-    - .translate_changelog_rules
