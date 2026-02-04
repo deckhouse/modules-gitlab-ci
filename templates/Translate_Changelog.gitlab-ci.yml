@@ -112,9 +112,15 @@
         exit 0
       fi
       git commit -m "Translate changelog ${VERSION} to English"
+      BRANCH="${CI_COMMIT_REF_NAME:-${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME}}"
+      if [ -z "$BRANCH" ]; then
+        echo "Cannot push: CI_COMMIT_REF_NAME and CI_MERGE_REQUEST_SOURCE_BRANCH_NAME are empty."
+        exit 1
+      fi
+      git checkout -B "$BRANCH"
       REPO_URL="https://oauth2:${RELEASE_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
       git remote set-url origin "$REPO_URL"
-      git push origin HEAD:refs/heads/"${CI_COMMIT_REF_NAME}"
+      git push origin "$BRANCH"
       # Create MR if not exists
       EXISTING_MR=$(curl -s --header "PRIVATE-TOKEN: ${RELEASE_TOKEN:-$CI_JOB_TOKEN}" \
         "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests?source_branch=${CI_COMMIT_REF_NAME}&target_branch=${TRANSLATE_BASE_BRANCH}&state=opened" \
