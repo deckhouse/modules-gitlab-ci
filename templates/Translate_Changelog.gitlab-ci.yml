@@ -20,12 +20,14 @@
     - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   before_script:
     - apt-get update -qq && apt-get install -y -qq git curl jq
-    - pip install --no-cache-dir deep-translator packaging
+    - python3 -m venv /tmp/venv
+    - /tmp/venv/bin/pip install --no-cache-dir deep-translator packaging
     - git config user.email "gitlab-ci@gitlab.com"
     - git config user.name "GitLab CI"
   script:
     - |
       set -euo pipefail
+      export PATH="/tmp/venv/bin:$PATH"
       CHANGELOG_PATH="${TRANSLATE_CHANGELOG_PATH}"
       # Check if last commit changed CHANGELOG/*.ru.yml
       CHANGED=$(git show --name-only --pretty=format: HEAD | grep "^${CHANGELOG_PATH}/.*\.ru\.yml$" || true)
