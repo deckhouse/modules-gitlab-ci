@@ -1,0 +1,17 @@
+# Example: Translate Changelog and Create MR (GitLab analogue of modules-actions translate-changelog).
+#
+# On push to a non-default branch: if the last commit changed CHANGELOG/*.ru.yml,
+# finds the latest Russian changelog, translates to English (.yml), commits, pushes,
+# and creates an MR to the base branch (title = version, e.g. v0.3.17).
+#
+# Optional: RELEASE_TOKEN (masked) for push and create MR; otherwise CI_JOB_TOKEN is used.
+
+include:
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/Translate_Changelog.gitlab-ci.yml'
+
+variables:
+  TRANSLATE_CHANGELOG_PATH: "CHANGELOG"
+  TRANSLATE_BASE_BRANCH: "main"
+
+Translate changelog and create MR:
+  extends: .translate_and_create_mr

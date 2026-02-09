@@ -1,0 +1,19 @@
+# Example: Merge MR and Create Release (GitLab analogue of modules-actions merge-and-release).
+#
+# 1. Add label "release" or "ready-for-release" to your Merge Request.
+# 2. Run the pipeline (or re-run after adding the label).
+# 3. Job merges MR (squash, delete source branch), creates tag from MR title version (e.g. v0.3.17),
+#    pushes tag, creates GitLab Release with changelog from CHANGELOG/<version>.yml.
+#
+# Required CI/CD variable (masked): RELEASE_TOKEN — GitLab token with api, write_repository
+# (Personal or Project Access Token). Used to merge MR, push tag, create release.
+
+include:
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/Merge_Release.gitlab-ci.yml'
+
+variables:
+  MERGE_RELEASE_CHANGELOG_PATH: "CHANGELOG"
+  MERGE_RELEASE_BASE_BRANCH: "main"
+
+Merge and Release:
+  extends: .merge_and_release

@@ -1,0 +1,148 @@
+# Translate Changelog and Create MR — GitLab analogue of modules-actions translate-changelog.
+#
+# When CHANGELOG/*.ru.yml is changed in the last commit: finds latest Russian changelog,
+# translates to English (.yml), commits, pushes, creates MR to base branch.
+#
+# variables (optional):
+#   TRANSLATE_CHANGELOG_PATH - path to CHANGELOG directory (default: CHANGELOG)
+#   TRANSLATE_BASE_BRANCH   - target branch for MR (default: main)
+#   RELEASE_TOKEN or CI_JOB_TOKEN - used to push and create MR (CI_JOB_TOKEN works in GitLab 15.9+)
+
+.translate_and_create_mr:
+  stage: pre
+  image:
+    name: python:3.11-slim
+    entrypoint: [""]
+  variables:
+    TRANSLATE_CHANGELOG_PATH: "CHANGELOG"
+    TRANSLATE_BASE_BRANCH: "main"
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git curl jq
+    - python3 -m venv /tmp/venv
+    - /tmp/venv/bin/pip install --no-cache-dir deep-translator packaging
+    - git config user.email "gitlab-ci@gitlab.com"
+    - git config user.name "GitLab CI"
+  script:
+    - |
+      set -euo pipefail
+      export PATH="/tmp/venv/bin:$PATH"
+      CHANGELOG_PATH="${TRANSLATE_CHANGELOG_PATH}"
+      # Check if last commit changed CHANGELOG/*.ru.yml
+      CHANGED=$(git show --name-only --pretty=format: HEAD | grep "^${CHANGELOG_PATH}/.*\.ru\.yml$" || true)
+      if [ -z "$CHANGED" ]; then
+        echo "No CHANGELOG .ru.yml files changed in last commit, skipping."
+        exit 0
+      fi
+      echo "CHANGELOG .ru.yml files changed in last commit: $CHANGED"
+      # Run translation (use project script if present, else inline Python)
+      if [ -f "${CI_PROJECT_DIR}/scripts/translate_changelog.py" ]; then
+        TRANSLATE_OUTPUT=$(cd "${CI_PROJECT_DIR}" && python3 scripts/translate_changelog.py "$CHANGELOG_PATH" 2>&1) || TRANSLATE_OUTPUT=""
+      else
+        TRANSLATE_OUTPUT=$(cd "${CI_PROJECT_DIR}" && python3 - "$CHANGELOG_PATH" << 'PYEOF'
+      import os, re, sys
+      from pathlib import Path
+      try:
+          from packaging import version as pkg_version
+          from deep_translator import GoogleTranslator
+      except ImportError as e:
+          print(f"Import error: {e}", file=sys.stderr)
+          sys.exit(1)
+      changelog_dir = sys.argv[1]
+      path = Path(changelog_dir)
+      if not path.exists():
+          sys.exit(0)
+      ru_files = list(path.glob("v*.ru.yml"))
+      if not ru_files:
+          sys.exit(0)
+      versions = []
+      for f in ru_files:
+          m = re.match(r"v(\d+\.\d+\.\d+)\.ru\.yml", f.name)
+          if m:
+              try:
+                  ver = pkg_version.parse(m.group(1))
+                  versions.append((ver, f.name))
+              except pkg_version.InvalidVersion:
+                  pass
+      if not versions:
+          sys.exit(0)
+      versions.sort(reverse=True, key=lambda x: x[0])
+      latest_ver, ru_name = versions[0]
+      version_str = f"v{latest_ver}"
+      eng_name = ru_name.replace(".ru.yml", ".yml")
+      if (path / eng_name).exists():
+          sys.exit(0)
+      ru_path, eng_path = path / ru_name, path / eng_name
+      translator = GoogleTranslator(source="ru", target="en")
+      with open(ru_path, "r", encoding="utf-8") as f:
+          ru_lines = f.readlines()
+      with open(eng_path, "w", encoding="utf-8") as f:
+          for line in ru_lines:
+              if not line.strip():
+                  f.write(line)
+                  continue
+              indent_len = len(line) - len(line.lstrip())
+              content = line.strip()
+              try:
+                  translated = translator.translate(content)
+              except Exception:
+                  translated = content
+              f.write(" " * indent_len + translated + "\n")
+      print(f"VERSION={version_str}")
+      print(f"RU_FILE={ru_name}")
+      print(f"ENG_FILE={eng_name}")
+      PYEOF
+      ) || TRANSLATE_OUTPUT=""
+      fi
+      # Parse VERSION from output; if missing, nothing was translated
+      VERSION=$(echo "$TRANSLATE_OUTPUT" | grep "^VERSION=" | cut -d= -f2)
+      if [ -z "$VERSION" ]; then
+        echo "No Russian changelog to translate (or English already exists)."
+        exit 0
+      fi
+      RU_FILE=$(echo "$TRANSLATE_OUTPUT" | grep "^RU_FILE=" | cut -d= -f2)
+      ENG_FILE=$(echo "$TRANSLATE_OUTPUT" | grep "^ENG_FILE=" | cut -d= -f2)
+      echo "Translated $RU_FILE -> $ENG_FILE (version $VERSION)"
+      # Commit and push
+      git add "${CHANGELOG_PATH}/"
+      git status
+      if git diff --staged --quiet; then
+        echo "No staged changes."
+        exit 0
+      fi
+      git commit -m "Translate changelog ${VERSION} to English"
+      BRANCH="${CI_COMMIT_REF_NAME:-${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME}}"
+      if [ -z "$BRANCH" ]; then
+        echo "Cannot push: CI_COMMIT_REF_NAME and CI_MERGE_REQUEST_SOURCE_BRANCH_NAME are empty."
+        exit 1
+      fi
+      git checkout -B "$BRANCH"
+      REPO_URL="https://oauth2:${RELEASE_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+      git remote set-url origin "$REPO_URL"
+      git push origin "$BRANCH"
+      # Create MR if not exists
+      EXISTING_MR=$(curl -s --header "PRIVATE-TOKEN: ${RELEASE_TOKEN:-$CI_JOB_TOKEN}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests?source_branch=${CI_COMMIT_REF_NAME}&target_branch=${TRANSLATE_BASE_BRANCH}&state=opened" \
+        | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['iid'] if d else '')" 2>/dev/null || echo "")
+      if [ -n "$EXISTING_MR" ]; then
+        echo "MR !${EXISTING_MR} already exists for ${CI_COMMIT_REF_NAME} -> ${TRANSLATE_BASE_BRANCH}"
+        exit 0
+      fi
+      ENG_PATH="${CI_PROJECT_DIR}/${CHANGELOG_PATH}/${ENG_FILE}"
+      DESC_FILE="/tmp/mr_desc.md"
+      printf "## Changelog %s\n\nThis MR contains the English translation of the Russian changelog for version %s.\n\n**Source file:** \\\`%s/%s\\\`\n**Translated file:** \\\`%s/%s\\\`\n\n<details>\n<summary>Changelog content</summary>\n\n\\\`\\\`\\\`yaml\n%s\n\\\`\\\`\\\`\n\n</details>\n" \
+        "$VERSION" "$VERSION" "$CHANGELOG_PATH" "$RU_FILE" "$CHANGELOG_PATH" "$ENG_FILE" "$(cat "$ENG_PATH")" > "$DESC_FILE"
+      jq -n \
+        --arg source_branch "$CI_COMMIT_REF_NAME" \
+        --arg target_branch "${TRANSLATE_BASE_BRANCH}" \
+        --arg title "$VERSION" \
+        --rawfile description "$DESC_FILE" \
+        '{ source_branch: $source_branch, target_branch: $target_branch, title: $title, description: $description }' \
+        | curl -s --request POST \
+          --header "PRIVATE-TOKEN: ${RELEASE_TOKEN:-$CI_JOB_TOKEN}" \
+          --header "Content-Type: application/json" \
+          --data @- \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests" \
+          | python3 -c "import sys,json; d=json.load(sys.stdin); print('Created MR !'+str(d.get('iid','')))"
+      echo "Translate changelog and create MR done."

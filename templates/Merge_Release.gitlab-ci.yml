@@ -1,0 +1,81 @@
+# Merge MR and Create Release — GitLab analogue of modules-actions merge-and-release.
+#
+# variables (optional):
+#   MERGE_RELEASE_CHANGELOG_PATH - path to CHANGELOG directory (default: CHANGELOG)
+#   MERGE_RELEASE_BASE_BRANCH    - base branch to merge into (default: main)
+#   RELEASE_TOKEN                - GitLab token with api, write_repository (for merge + push + release).
+#                                 If not set, CI_JOB_TOKEN is used (may not have push/release in all setups).
+#
+# rules: job runs when MR has label "release" or "ready-for-release".
+#
+# IMPORTANT: GitLab does NOT start a pipeline when you add/remove a label. After adding
+# the "release" (or "ready-for-release") label to the MR, you must run the pipeline
+# manually: open the MR → Pipelines → "Run pipeline", or use the "Run pipeline" button.
+
+.merge_and_release:
+  stage: post
+  image:
+    name: debian:bookworm-slim
+    entrypoint: [""]
+  variables:
+    MERGE_RELEASE_CHANGELOG_PATH: "CHANGELOG"
+    MERGE_RELEASE_BASE_BRANCH: "main"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /(^|,)release(,|$)/
+      when: on_success
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /(^|,)ready-for-release(,|$)/
+      when: on_success
+    - when: never
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git curl jq
+  script:
+    - |
+      set -euo pipefail
+      REPO_DIR=$(mktemp -d)
+      trap 'rm -rf "$REPO_DIR"' EXIT
+      PR_TITLE="$CI_MERGE_REQUEST_TITLE"
+      VERSION=$(echo "$PR_TITLE" | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+      [ -n "$VERSION" ] || { echo "Error: Could not extract version from MR title: $PR_TITLE"; exit 1; }
+      [[ "$VERSION" =~ ^v ]] || VERSION="v${VERSION}"
+      echo "Extracted version: $VERSION"
+      # Merge MR (squash, delete source branch)
+      curl -s --request PUT \
+        --header "PRIVATE-TOKEN: ${RELEASE_TOKEN:-$CI_JOB_TOKEN}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/merge?squash=true&should_remove_source_branch=true" \
+        | jq -e .id >/dev/null || { echo "Merge failed"; exit 1; }
+      echo "MR merged successfully."
+      sleep 10
+      # Clone base branch (post-merge), tag, push
+      git config --global user.email "gitlab-ci@gitlab.com"
+      git config --global user.name "GitLab CI"
+      REPO_URL="https://oauth2:${RELEASE_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+      git clone --branch "${MERGE_RELEASE_BASE_BRANCH}" --single-branch --depth 50 "$REPO_URL" "$REPO_DIR"
+      cd "$REPO_DIR"
+      git fetch origin "${MERGE_RELEASE_BASE_BRANCH}"
+      git reset --hard "origin/${MERGE_RELEASE_BASE_BRANCH}"
+      if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
+        git tag -a "$VERSION" -m "Release $VERSION"
+        git push origin "$VERSION"
+        echo "Tag $VERSION created and pushed."
+      else
+        echo "Tag $VERSION already exists, skipping tag creation."
+      fi
+      # Read changelog from clone (merged state)
+      CHANGELOG_FILE="$REPO_DIR/${MERGE_RELEASE_CHANGELOG_PATH}/${VERSION}.yml"
+      DESC_FILE="$REPO_DIR/release_description.md"
+      if [ -f "$CHANGELOG_FILE" ]; then
+        printf "## Changelog\n\n\`\`\`yaml\n%s\n\`\`\`\n" "$(cat "$CHANGELOG_FILE")" > "$DESC_FILE"
+      else
+        echo "Release $VERSION" > "$DESC_FILE"
+        echo "Warning: Changelog file $CHANGELOG_FILE not found, using default description."
+      fi
+      # Create GitLab Release
+      jq -n --arg tag_name "$VERSION" --arg name "$VERSION" --rawfile description "$DESC_FILE" \
+        '{ tag_name: $tag_name, name: $name, description: $description }' \
+        | curl -s --request POST \
+          --header "PRIVATE-TOKEN: ${RELEASE_TOKEN:-$CI_JOB_TOKEN}" \
+          --header "Content-Type: application/json" \
+          --data @- \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases" \
+          | jq -e .tag_name >/dev/null || { echo "Create release failed"; exit 1; }
+      echo "GitLab Release created for $VERSION."
