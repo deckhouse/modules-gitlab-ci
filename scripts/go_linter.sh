@@ -39,6 +39,14 @@ section_start "install_linter" "Installing golangci-lint@$linter_version"
 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b . $linter_version
 section_end "install_linter"
 
+# Migrate .golangci config to v2 format if needed (golangci-lint v2 requires version: "2")
+for config in .golangci.yaml .golangci.yml; do
+    if [ -f "$config" ] && ! grep -q 'version:.*"2"' "$config" 2>/dev/null; then
+        echo "Migrating $config to golangci-lint v2 format..."
+        ./golangci-lint migrate -c "$config" --skip-validation 2>/dev/null || true
+    fi
+done
+
 basedir=$(pwd)
 failed='false'
 
