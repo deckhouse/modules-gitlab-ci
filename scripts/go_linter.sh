@@ -34,7 +34,7 @@ section_end() {
     fi
 }
 
-linter_version="v1.64.5"
+linter_version="v2.9.0"
 section_start "install_linter" "Installing golangci-lint@$linter_version"
 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b . $linter_version
 section_end "install_linter"
