@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # Fix covdata tool lookup with Go 1.25 toolchain switching
-export GOTOOLCHAIN=go1.25.0
+export GOTOOLCHAIN=auto
 
 if [ ! -d "images" ]; then
     echo "No images/ directory found. Please run this script from the root of the repository."
