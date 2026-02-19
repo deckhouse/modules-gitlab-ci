@@ -40,14 +40,21 @@
     - |
       HOST=$(echo "$CVE_TEST_REPO_GIT" | sed -E 's/.*@([^:]+).*/\1/')
       ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
-      ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || true
 
+    - rm -rf /tmp/cve-scripts
     - git clone --depth 1 $CVE_TEST_REPO_GIT /tmp/cve-scripts
     - cp /tmp/cve-scripts/*.sh /tmp/cve-scripts/*.py .
     - chmod +x *.sh *.py
 
   script:
     - |
+      export SOURCE_TAG
+      export CASE
+      export EXTERNAL_MODULE_NAME
+      export RELEASE_IN_DEV
+      export SCAN_USERS
+      export SCAN_SEVERAL_LATEST_RELEASES
+      export LATEST_RELEASES_AMOUNT
       export TRIVY_BIN_VERSION
       export TRIVY_REPO_ID
       export TRIVY_DB_URL
@@ -60,13 +67,6 @@
       export DEV_REGISTRY
       export DEV_REGISTRY_USER
       export DEV_REGISTRY_PASSWORD
-      export SOURCE_TAG
-      export CASE
-      export EXTERNAL_MODULE_NAME
-      export RELEASE_IN_DEV
-      export SCAN_USERS
-      export SCAN_SEVERAL_LATEST_RELEASES
-      export LATEST_RELEASES_AMOUNT
       export MODULE_PROD_REGISTRY_CUSTOM_PATH
       export MODULE_DEV_REGISTRY_CUSTOM_PATH
       export DIGEST_FROM_WERF
