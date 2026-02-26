@@ -23,7 +23,6 @@ paths = [
 
     # Storage modules - common allowlist
     '''(?:^|/)images/.*patches.*\.patch$''',
-    '''(?:^|/)docs/.*\.md$''',
     '''(?:^|/)test-secret\.txt$''',
     '''(?:^|/)e2e/.*''',
     '''(?:^|/).*_test\.go$''',
@@ -33,7 +32,7 @@ paths = [
 regexes = [
     # Go module checksums - always public
     '''h1:[A-Za-z0-9+/=]{40,}''',
-    
+
     # Public certificates (only ca.crt, NOT private keys!)
     '''data:\s*\n\s*ca\.crt:\s*[A-Za-z0-9+/=\s]+''',
     
