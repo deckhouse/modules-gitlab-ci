@@ -56,9 +56,6 @@
 
       echo "Updating Trivy Data Bases"
       mkdir -p "${workdir}/bin/trivy_cache"
-      echo "==========================DEBUG========================"
-      echo "TRIVY USER: ${PROD_REGISTRY_USER}"
-      crane manifest ${TRIVY_DB_URL} | jq .
       ${workdir}/bin/trivy image --username "${PROD_REGISTRY_USER}" --password "${PROD_REGISTRY_PASSWORD}" --download-db-only --db-repository "${TRIVY_DB_URL}" --cache-dir "${workdir}/bin/trivy_cache"
       ${workdir}/bin/trivy image --username "${PROD_REGISTRY_USER}" --password "${PROD_REGISTRY_PASSWORD}" --download-java-db-only --java-db-repository "${TRIVY_JAVA_DB_URL}" --cache-dir "${workdir}/bin/trivy_cache"
       echo
