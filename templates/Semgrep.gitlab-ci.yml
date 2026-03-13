@@ -15,10 +15,10 @@
 #   COMMIT_HASH     - commit hash (default: CI_COMMIT_SHA)
 
 stages:
-  - analysis
+  - static_analysis
 
 semgrep:scan:
-  stage: analysis
+  stage: static_analysis
   image: registry.flant.com/deckhouse/ssdlc-tools/semgrep-analyzer:main
   tags:
     - werf-2-stable
