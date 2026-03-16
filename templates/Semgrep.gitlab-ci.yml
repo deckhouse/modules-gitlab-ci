@@ -44,7 +44,8 @@ semgrep:scan:
         fi
       done < <(env)
   script:
-    - python3 /app/analyze.py
+    - python3 /app/analyze.py || EXIT_CODE=$?
+    - exit $EXIT_CODE
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH =~ /^release-/'
