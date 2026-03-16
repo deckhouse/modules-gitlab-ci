@@ -14,9 +14,6 @@
 #   COMMIT_REF_NAME - branch name (default: CI_COMMIT_REF_NAME)
 #   COMMIT_HASH     - commit hash (default: CI_COMMIT_SHA)
 
-stages:
-  - static_analysis
-
 semgrep:scan:
   stage: static_analysis
   image: registry.flant.com/deckhouse/ssdlc-tools/semgrep-analyzer:main
