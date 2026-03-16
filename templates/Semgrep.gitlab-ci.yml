@@ -53,7 +53,7 @@ semgrep:scan:
           echo "Stripped value: \"${stripped_value#*#}\""
 
           echo "d8 stronghold read: "
-          d8 stronghold read -field=data -format=json "${secret_path}" | jq -r 'keys'
+          d8 stronghold read -field=data -format=json "${secret_path}"
           echo "getting secret value..."
 
           secret_value=$(d8 stronghold read -field=data -format=json "${secret_path}" | jq --arg v "${stripped_value#*#}"  '.[$v]' -r )
