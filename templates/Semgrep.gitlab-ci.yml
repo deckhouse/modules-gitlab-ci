@@ -31,19 +31,7 @@ semgrep:scan:
     SVACER_IMPORT_PASSWORD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#SVACER_IMPORT_PASSWORD"
   before_script:
     - |
-      echo "SVACER_URL: \"${SVACER_URL}\""
-      echo "VAULT_ADDR: \"${VAULT_ADDR}\""
-      echo "VAULT_ROLE: \"${VAULT_ROLE}\""
-
       export VAULT_TOKEN=$(d8 stronghold write -field=token auth/fox/login role=$VAULT_ROLE jwt=$VAULT_ID_TOKEN)
-
-      echo "VAULT TOKEN: ${VAULT_TOKEN}"
-
-      if [[ -z "$VAULT_TOKEN" ]]; then
-        echo "VAULT_TOKEN is empty"
-      else
-        echo "VAULT_TOKEN not empty"
-      fi
 
       while IFS='=' read -r name value; do
         # Проверяем, начинается ли значение с 'vault:'
@@ -53,17 +41,10 @@ semgrep:scan:
           secret_path="${stripped_value%%#*}"
           echo "Secret path: \"${secret_path}\""
           echo "Stripped value: \"${stripped_value#*#}\""
-
-          echo "d8 stronghold read: "
-          d8 stronghold read -field=data -format=json "${secret_path}"
-          echo "getting secret value"
-
           secret_value=$(d8 stronghold read -field=data -format=json "${secret_path}" | jq --arg v "${stripped_value#*#}"  '.[$v]' -r )
           export "$name=${secret_value}"
         fi
       done < <(env)
-
-      echo "SVACER_URL: \"${SVACER_URL}\""
   script:
     - python3 /app/analyze.py || EXIT_CODE=$?
     - exit $EXIT_CODE
