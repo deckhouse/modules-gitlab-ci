@@ -19,7 +19,7 @@ stages:
 
 semgrep:scan:
   stage: static_analysis
-  image: registry.flant.com/deckhouse/ssdlc-tools/semgrep-analyzer:main
+  image: registry.flant.com/deckhouse/ssdlc-tools/semgrep-analyzer:release-1-0
   tags:
     - werf-2-stable
   id_tokens:
