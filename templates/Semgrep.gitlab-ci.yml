@@ -31,7 +31,12 @@ semgrep:scan:
     SVACER_IMPORT_PASSWORD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#SVACER_IMPORT_PASSWORD"
   before_script:
     - |
-      export VAULT_TOKEN=$(d8 stronghold write -field=token auth/fox/login role=$VAULT_ROLE jwt=$VAULT_ID_TOKEN)
+      export VAULT_TOKEN=$(d8 stronghold write -field=token auth/fox/login role=$VAULT_ROLE jwt=$VAULT_ID_TOKEN 2>/dev/null)
+
+      if [[ -z "$VAULT_TOKEN" ]]; then
+        echo "VAULT_TOKEN is empty"
+        exit 1
+      fi
 
       while IFS='=' read -r name value; do
         # Проверяем, начинается ли значение с 'vault:'
@@ -39,9 +44,7 @@ semgrep:scan:
           # Удаляем префикс 'vault:'
           stripped_value=${value#vault:}
           secret_path="${stripped_value%%#*}"
-          echo "Secret path: \"${secret_path}\""
-          echo "Stripped value: \"${stripped_value#*#}\""
-          secret_value=$(d8 stronghold read -field=data -format=json "${secret_path}" | jq --arg v "${stripped_value#*#}"  '.[$v]' -r )
+          secret_value=$(d8 stronghold read -field=data -format=json "${secret_path}" 2>/dev/null | jq --arg v "${stripped_value#*#}"  '.[$v]' -r )
           export "$name=${secret_value}"
         fi
       done < <(env)
