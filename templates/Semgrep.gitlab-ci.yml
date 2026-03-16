@@ -35,7 +35,9 @@ semgrep:scan:
       echo "VAULT_ADDR: \"${VAULT_ADDR}\""
       echo "VAULT_ROLE: \"${VAULT_ROLE}\""
 
-      export VAULT_TOKEN=$(d8 stronghold write --field=token auth/fox/login role=$VAULT_ROLE jwt=$VAULT_ID_TOKEN)
+      export VAULT_TOKEN=$(d8 stronghold write auth/fox/login role=$VAULT_ROLE jwt=$VAULT_ID_TOKEN | jq -r '.auth.client_token')
+
+      echo "TOKEN: ${VAULT_TOKEN}"
 
       if [[ -z "$VAULT_TOKEN" ]]; then
         echo "VAULT_TOKEN is empty"
@@ -53,7 +55,7 @@ semgrep:scan:
           echo "Stripped value: \"${stripped_value#*#}\""
 
           echo "d8 stronghold read: "
-          d8 stronghold read --field=data --format=json "${secret_path}"
+          d8 stronghold read "${secret_path}"
           echo "getting secret value..."
 
           secret_value=$(d8 stronghold read --field=data --format=json "${secret_path}" | jq --arg v "${stripped_value#*#}"  '.[$v]' -r )
