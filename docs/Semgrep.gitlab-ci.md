@@ -96,7 +96,7 @@ path: src
      - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/templates/Semgrep.gitlab-ci.yml'
    ```
 
-   Либо через `project`/`file`, если шаблон раздаётся из вашего GitLab:
+   Либо через `project`/`file`:
 
    ```yaml
    include:
