@@ -1,5 +1,5 @@
 # Semgrep static analysis: SARIF report packed with source, upload via Svacer API.
-# Script semgrep_analyze.py discovers semgrep.yml/semgrep.yaml in the repo (or under SEMGREP_CONFIG_SEARCH_DIR).
+# Script finds all directories with semgrep.yml or semgrep.yaml (one config per dir; extension may differ per dir).
 #
 # Required variables (set in project or when running the job):
 #   VAULT_ADDR             - seguro URL
