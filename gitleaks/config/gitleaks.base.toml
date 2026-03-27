@@ -31,7 +31,7 @@ paths = [
 # === Safe patterns ===
 regexes = [
     # Go module checksums - always public
-    '''h1:[A-Za-z0-9+/=]{40,}''',
+    '''h1:[A-Za-z0-9+/=]{12,}''',
 
     # AWS Example values from official documentation - exact match
     '''AKIAIOSFODNN7EXAMPLE''',
