@@ -1,138 +1,118 @@
-# CVE_Scan CI Integration
+# CVE_Scan — GitLab CI integration
 
-## Description
-This CI file will run a Trivy CVE scan against the module images and its submodule images, and then upload the reports to DefectDojo.
-The script will detect release or dev tag of module image is used and then construct registry location by itself. If your module located in registries by not standart paths - you may want to define custom path by *MODULE_PROD_REGISTRY_CUSTOM_PATH* and *MODULE_DEV_REGISTRY_CUSTOM_PATH* variables.
-CI Use cases:
-- Scan by scheduler
-  - Scan main branch and several latest releases 2-3 times a week
-- Scan on PR
-  - Scan images on pull request to check if no new vulnerabilities are present or to ensure if they are closed.
-- Manual scan
-  - Scan specified release by entering semver minor version of target release in *release_branch* variable.
-  - Scan main branch and several latest releases by setting *SCAN_SEVERAL_LASTEST_RELEASES* to "true" and optionally defining amount of latest minor releases by setting a number into *LATEST_RELEASES_AMOUNT* variable.
-  - Scan only main branch just by running pipeline
+The template runs **Trivy** scans of the module images (and related images) and uploads reports to **DefectDojo**. The `cve_scan.sh` script chooses dev vs release tags and builds registry paths.
 
-## Variables
+Non-standard module paths in prod/dev registries are set with **`MODULE_PROD_REGISTRY_CUSTOM_PATH`** and **`MODULE_DEV_REGISTRY_CUSTOM_PATH`** (template defaults are Deckhouse paths for external modules).
 
-### Pipeline variables section
-```
-CVE_RELEASE_TO_SCAN - Set minor version of release you want to scan. e.g.: 1.23
-CVE_SEVERITY - Set CVE severity levels to scan. Default is: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-CVE_SCAN_SEVERAL_LASTEST_RELEASES - true/false. Whether to scan last several releases or not. For scheduled pipelines override will not work as value is always true.
-```
+## Typical workflows
 
-### Job level
+- **Scheduled** — periodically scan the default branch and several latest releases (e.g. 2–3 times per week).
+- **Merge request** — scan images for the branch/MR tag for new or unresolved issues.
+- **Manual** — set a tag or branch for `SOURCE_TAG` (via a pipeline variable or `rules`); optionally scan several latest releases (`SCAN_SEVERAL_LATEST_RELEASES: "True"`, `LATEST_RELEASES_AMOUNT`).
 
-#### Mandatory
-```
-TAG - module image tag
-MODULE_NAME - module name
-PROD_REGISTRY - must be deckhouse prod read registry, used to get trivy databases and release images
-PROD_REGISTRY_USER - username to log in to deckhouse prod read registry
-PROD_REGISTRY_PASSWORD - password to log in to deckhouse prod read registry
-DEV_REGISTRY - must be deckhouse dev registry, used to get dev images
-DEV_REGISTRY_USER - username to log in to deckhouse dev registry
-DEV_REGISTRY_PASSWORD - password to log in to deckhouse dev registry
-```
+## Including the template
 
-#### Optional
-The following variables should not be defined if their default values are ok for your needs.
-```
-SCAN_SEVERAL_LASTEST_RELEASES - true/false. Whether to scan last several releases or not. For scheduled pipelines override will not work as value is always true.
-TRIVY_REPORTS_LOG_OUTPUT - 0 - no output, 1 - only CVE, 2 - CVE & License. Output Trivy reports into CI job log, default - 2
-LATEST_RELEASES_AMOUNT - Optional. Number of latest releases to scan. Default is: 3
-SEVERITY - Optional. Vulnerabilities severity to scan. Default is: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-MODULE_PROD_REGISTRY_CUSTOM_PATH - Optional. Module custom path in prod registry. Example: flant/modules
-MODULE_DEV_REGISTRY_CUSTOM_PATH - Optional. Module custom path in dev registry. Example: flant/modules
-```
+In the root `.gitlab-ci.yml`:
 
-### GitLab Masked variables
-```
-DD_URL - URL to defectDojo
-DD_TOKEN - token of defectDojo to upload reports
-PROD_REGISTRY - must be deckhouse prod read registry, used to get trivy databases and release images
-PROD_REGISTRY_USER - username to log in to deckhouse prod read registry
-PROD_REGISTRY_PASSWORD - password to log in to deckhouse prod read registry
-DEV_REGISTRY - must be deckhouse dev registry, used to get dev images
-DEV_REGISTRY_USER - username to log in to deckhouse dev registry
-DEV_REGISTRY_PASSWORD - password to log in to deckhouse dev registry
-```
-
-## How to include
-
-At the top of your main .gitlab-ci.yml define include section:
-```
+```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/v2.0/templates/CVE_Scan.gitlab-ci.yml'
-```
+  - remote: 'https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/<branch>/templates/CVE_Scan.gitlab-ci.yml'
 
-Add global variables with ability to redefine by manual execution in GitLab web UI:
-```
-variables:
-  CVE_RELEASE_TO_SCAN:
-    value: ""
-    description: "Optional. Set minor version of release you want to scan. e.g.: 1.23"
-  CVE_SEVERITY:
-    value: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
-    description: "Optional. Set CVE severity levels to scan. Default is: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
-  CVE_SCAN_SEVERAL_LASTEST_RELEASES:
-    value: "false"
-    description: "Optional. true/false. Whether to scan last several releases or not. For scheduled pipelines override will not work as value is always true."
-```
-
-Add cve_scan stage in a propper place in stages sequence (usually after build stage):
-```
 stages:
+  - build
   - cve_scan
+  # …
 ```
 
-Then choose a propper place in your pipeline to put CVE scan job (usually after build stage) and add required variables.
-Example:
-```
+A fuller job skeleton: **`examples/simple-module.gitlab-ci.yml`** (adjust `include`, job names in `needs`, and runner `tags` if required).
+
+### Important: do not override `before_script`
+
+In `.cve_scan`, **`before_script`** installs/uses **d8**, obtains a **Seguro/BOB (Vault)** token, resolves variables prefixed with **`vault:`**, configures SSH, clones the scripts repository, and copies `*.sh` / `*.py`.
+
+If you define **`before_script`** on your job, it **replaces** the template’s entirely — secrets from BOB will not be resolved, and logs will still show strings like `vault:projects/...`.
+
+Do **not** follow the old note “Override before_script as not needed” with the **current** template.
+
+## Seguro (BOB) and secrets
+
+- Sensitive values in the template use **`vault:path#key`** (secret `Trivy_CVE_Scan_CI_Secrets` and others — see `templates/CVE_Scan.gitlab-ci.yml`).
+- The GitLab project or group needs **`VAULT_ROLE`**: the Fox JWT role name configured in Seguro (`bound_audiences: gitlab-access-aud`). Policies and roles live in the **`seguro-policy`** repo (README, GitLab section).
+- For BOB reads to work, runners need **`d8`/stronghold**, access to **Seguro**, and the runner tags your org uses for these jobs.
+
+**Override without BOB:** in the module job you can set the same variable to a **plain** value (e.g. `PROD_REGISTRY: ${PROD_READ_REGISTRY}` from GitLab group variables) — it overrides the template’s `vault:…` string.
+
+Full list of environment variables for `cve_scan.sh`: the **`cve-scan`** repository (`README.md`).
+
+## Pipeline variables (global, optional)
+
+Declare in `variables:` with `description` so manual runs can set values from the UI:
+
+| Variable | Purpose |
+|----------|---------|
+| `CVE_RELEASE_TO_SCAN` | Tag/branch for manual runs; often mapped to `SOURCE_TAG` in a `web` rule (legacy name in older docs) |
+| `SCAN_SEVERAL_LATEST_RELEASES` | **`"True"`** / **`"False"`** (must match `cve_scan.sh`; legacy name `CVE_SCAN_SEVERAL_LASTEST_RELEASES`) |
+| `LATEST_RELEASES_AMOUNT` | How many latest releases to scan when several-releases mode is on; default **3** |
+| `TRIVY_REPORTS_LOG_OUTPUT` | `0` — no log, `1` — CVE only, `2` — CVE and licenses (see template) |
+| `MODULE_PROD_REGISTRY_CUSTOM_PATH` | Module path in prod registry (default: `deckhouse/fe/modules`) |
+| `MODULE_DEV_REGISTRY_CUSTOM_PATH` | Module path in dev registry (default: `sys/deckhouse-oss/modules`) |
+| `DIGEST_FROM_WERF` | Werf digest filename (external module scenario) |
+
+## Module job variables (you must set)
+
+| Variable | Description |
+|----------|-------------|
+| **`VAULT_ROLE`** | Fox role in Seguro for this job/project |
+| **`CASE`** | Script scenario; for Deckhouse external modules use **`"External Modules"`** |
+| **`EXTERNAL_MODULE_NAME`** | Module name in registry paths |
+| **`RELEASE_IN_DEV`** | **`"True"`** / **`"False"`** as in `cve_scan.sh` (case matters) |
+| **`SOURCE_TAG`** | Tag or branch to scan (`main`, `mr123`, branch slug, etc.) — usually via **`rules` → `variables`** |
+
+Registries and tokens (**`PROD_*`**, **`DEV_*`**, **`DD_*`**, **`TRIVY_PROD_REGISTRY`**, keys for cloning `cve-scan`, …) default from **BOB** via paths in the template; override them in **`cve_scan.variables`** with normal references to project/group CI/CD variables if needed.
+
+## Example job
+
+```yaml
 cve_scan:
   stage: cve_scan
-  before_script:
-    # Override default before_script as not needed
-    - |
-      echo "Executing CVE Scan"
-  variables:
-    DD_URL: ${DD_URL}
-    DD_TOKEN: ${DD_TOKEN}
-    TAG: $MODULES_MODULE_TAG
-    MODULE_NAME: $MODULES_MODULE_NAME
-    DEV_REGISTRY: ${DEV_REGISTRY}
-    DEV_REGISTRY_PASSWORD: ${DEV_REGISTRY_PASSWORD}
-    DEV_REGISTRY_USER: ${DEV_REGISTRY_LOGIN}
-    PROD_REGISTRY: ${PROD_REGISTRY}
-    PROD_REGISTRY_USER: ${PROD_REGISTRY_USER}
-    PROD_REGISTRY_PASSWORD: ${PROD_REGISTRY_USER}
-    SEVERITY: ${CVE_SEVERITY}
-    SCAN_SEVERAL_LASTEST_RELEASES: ${CVE_SCAN_SEVERAL_LASTEST_RELEASES}
   extends:
     - .cve_scan
+  variables:
+    CASE: "External Modules"
+    EXTERNAL_MODULE_NAME: my-module
+    RELEASE_IN_DEV: "False"
+    VAULT_ROLE: "your-fox-role-name"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      needs: ["build_dev"]
+      needs: ["Build"]
       variables:
-        TAG: mr${CI_MERGE_REQUEST_IID}
-        SEVERITY: "HIGH,CRITICAL"
+        SOURCE_TAG: mr${CI_MERGE_REQUEST_IID}
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      needs: ["build_main"]
+      needs: ["Build"]
       variables:
-        TAG: ${CI_DEFAULT_BRANCH}
-        SEVERITY: "HIGH,CRITICAL"
-    - if: $CI_COMMIT_TAG && $CI_COMMIT_BRANCH != "main"
+        SOURCE_TAG: ${CI_DEFAULT_BRANCH}
+    - if: $CI_COMMIT_TAG
       variables:
-        TAG: ${CI_COMMIT_TAG}
-        SEVERITY: "HIGH,CRITICAL"
+        SOURCE_TAG: ${CI_COMMIT_TAG}
       when: manual
     - if: $CI_PIPELINE_SOURCE == "schedule"
       variables:
-        LATEST_RELEASES_AMOUNT: 3
+        SCAN_SEVERAL_LATEST_RELEASES: "True"
+        LATEST_RELEASES_AMOUNT: "3"
+        SOURCE_TAG: ${CI_DEFAULT_BRANCH}
     - if: $CI_PIPELINE_SOURCE == "web"
       variables:
-        TAG: ${CVE_RELEASE_TO_SCAN}
+        SOURCE_TAG: ${CVE_RELEASE_TO_SCAN}
 ```
-Please note, that some variables can be used as global in 'variables' section of your .gitlab-ci file.
-You can also define required rules to execute this job depend on your workflow needs.
+
+You can move some variables to the global **`variables:`** block if they are shared across jobs.
+
+## Legacy names (migration from older docs)
+
+Older docs used **`TAG`** and **`MODULE_NAME`**. The current `cve_scan.sh` and template use **`SOURCE_TAG`**, **`EXTERNAL_MODULE_NAME`**, and **`CASE`**. Old examples that only overrode `before_script` and did not use BOB **do not match** the current template.
+
+## References
+
+- Template: `templates/CVE_Scan.gitlab-ci.yml`
+- Example: `examples/simple-module.gitlab-ci.yml`
+- Documentation: [ssdlc wiki](https://wiki.flant.ru/doc/skanirovanie-cvelicense-1HUtHAMSD8)

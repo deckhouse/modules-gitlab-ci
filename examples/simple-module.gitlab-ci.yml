@@ -38,45 +38,36 @@ Build:
 
 cve_scan:
   stage: cve_scan
-  before_script:
-    # Override default before_script as not needed
-    - |
-      echo "Executing CVE Scan"
+  # Before_script is not needed, because it's already in the template
   variables:
-    TAG: $MODULES_MODULE_TAG
-    MODULE_NAME: $MODULES_MODULE_NAME
-    DEV_REGISTRY: ${DEV_REGISTRY}
-    DEV_REGISTRY_PASSWORD: ${DEV_REGISTRY_PASSWORD}
-    DEV_REGISTRY_USER: ${DEV_REGISTRY_LOGIN}
-    PROD_REGISTRY: ${PROD_READ_REGISTRY}
-    PROD_REGISTRY_USER: ${PROD_READ_REGISTRY_USER}
-    PROD_REGISTRY_PASSWORD: ${PROD_READ_REGISTRY_USER}
-    SEVERITY: ${CVE_SEVERITY}
-    SCAN_SEVERAL_LASTEST_RELEASES: ${CVE_SCAN_SEVERAL_LASTEST_RELEASES}
+    # The variables previously specified in the repository or gitlab-ci.yaml will override the variables in the template.
+    CASE: "External Modules"
+    EXTERNAL_MODULE_NAME: gpu
+    RELEASE_IN_DEV: "False"
+    VAULT_ROLE: $VAULT_ROLE
   extends:
     - .cve_scan
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       needs: ["Build"]
       variables:
-        TAG: mr${CI_MERGE_REQUEST_IID}
-        SEVERITY: "HIGH,CRITICAL"
+        SOURCE_TAG: mr${CI_MERGE_REQUEST_IID}
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       needs: ["Build"]
       variables:
-        TAG: ${CI_DEFAULT_BRANCH}
-        SEVERITY: "HIGH,CRITICAL"
+        SOURCE_TAG: ${CI_DEFAULT_BRANCH}
     - if: $CI_COMMIT_TAG && $CI_COMMIT_BRANCH != "main"
       variables:
-        TAG: ${CI_COMMIT_TAG}
-        SEVERITY: "HIGH,CRITICAL"
+        SOURCE_TAG: ${CI_COMMIT_TAG}
       when: manual
     - if: $CI_PIPELINE_SOURCE == "schedule"
       variables:
-        LATEST_RELEASES_AMOUNT: 3
+        SCAN_SEVERAL_LATEST_RELEASES: "True"
+        LATEST_RELEASES_AMOUNT: "3"
+        SOURCE_TAG: ${CI_DEFAULT_BRANCH}
     - if: $CI_PIPELINE_SOURCE == "web"
       variables:
-        TAG: ${CVE_RELEASE_TO_SCAN}
+        SOURCE_TAG: ${SOURCE_TAG}
 
 Deploy to Alpha:
   stage: deploy_prod_alpha
