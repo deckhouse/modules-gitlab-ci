@@ -64,6 +64,7 @@
           secret_value=$(${D8_BIN} stronghold read -field=data --format=json "${secret_path}" | jq --arg v "${stripped_value#*#}" '.[$v]' -r)
           export "$name=${secret_value}"
         fi
+        
       done < <(env)
       echo "Variables written to environment"
 

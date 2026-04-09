@@ -63,7 +63,12 @@ before_script:
 
   # Download base images yaml file
   - env | grep BASE_IMAGES_VERSION
-  - curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
+  - |
+    if [[ "${BASE_IMAGES_VERSION}" == v0* ]]; then
+      curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
+    else
+      curl --fail -sSLO https://fox.flant.com/api/v4/projects/deckhouse%2Fcontainer-base%2Fbase-images/packages/generic/base_images/${BASE_IMAGES_VERSION}/base_images.yml
+    fi
 
   # Download deckhouse lib-helm archive
   - |
@@ -74,6 +79,9 @@ before_script:
 
   # Add ssh keys
   - |
+    if [[ -n "${SOURCE_REPO_SSH_KEY_B64}" ]]; then
+      SOURCE_REPO_SSH_KEY=$(echo "${SOURCE_REPO_SSH_KEY_B64}" | base64 -d)
+    fi
     if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
 
       eval $(ssh-agent)
