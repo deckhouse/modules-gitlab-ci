@@ -1,7 +1,7 @@
 # Centralized Gitleaks configuration for all Deckhouse repositories
 # This file is distributed via modules-actions/gitleaks action
 #
-# CI downloads this to /tmp/gitleaks.base.toml. Repositories can extend it:
+# Repositories can extend this config by creating local .gitleaks.toml:
 #   [extend]
 #   useDefault = false
 #   path = "/tmp/gitleaks.base.toml"
@@ -15,6 +15,8 @@ useDefault = true
 # Global allowlists (merged with default config)
 [allowlist]
 
+regexTarget = "line"
+
 # === Safe files/directories ===
 paths = [
     # Go dependencies - public hashes
@@ -26,6 +28,9 @@ paths = [
     '''(?:^|/)test-secret\.txt$''',
     '''(?:^|/)e2e/.*''',
     '''(?:^|/).*_test\.go$''',
+    # Specific files with known false positives
+    # "modules/101-cert-manager/docs/USAGE.md",
+    # "modules/101-cert-manager/docs/USAGE_RU.md",
 ]
 
 # === Safe patterns ===
