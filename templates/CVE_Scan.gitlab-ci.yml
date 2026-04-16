@@ -1,6 +1,4 @@
 .cve_scan:
-  tags:
-    - deckhouse
   variables:
     SOURCE_TAG: ""
     CASE: ""
