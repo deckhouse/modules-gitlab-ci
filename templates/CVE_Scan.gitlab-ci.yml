@@ -81,7 +81,7 @@
 
       echo "Cloning cve-scripts repository"
       rm -rf /tmp/cve-scripts
-      git clone --depth 1 "$CVE_TEST_REPO_GIT" /tmp/cve-scripts
+      git -c url."git@fox.flant.com:".insteadOf="" clone --depth 1 "$CVE_TEST_REPO_GIT" /tmp/cve-scripts
       cp /tmp/cve-scripts/*.sh /tmp/cve-scripts/*.py .
       chmod +x *.sh *.py
       echo "Scripts copied to current directory"
