@@ -143,7 +143,6 @@
   script:
     - |
       export GOTOOLCHAIN=auto
-      go install cmd/covdata@latest
 
       if [ ! -d "images" ]; then
         echo "No images/ directory found. Please run this script from the root of the repository."
