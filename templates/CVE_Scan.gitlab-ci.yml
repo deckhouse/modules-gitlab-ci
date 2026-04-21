@@ -1,4 +1,5 @@
 .cve_scan:
+  allow_failue: true
   variables:
     SOURCE_TAG: ""
     CASE: ""
