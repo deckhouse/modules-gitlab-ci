@@ -27,7 +27,20 @@
       when: on_success
     - when: never
   before_script:
-    - apt-get update -qq && apt-get install -y -qq git curl jq
+    - |
+      set -e
+      missing=""
+      for bin in git curl jq; do
+        command -v "$bin" >/dev/null 2>&1 || missing="$missing $bin"
+      done
+      if [ -n "$missing" ]; then
+        if [ "$(id -u)" = "0" ]; then
+          apt-get update -qq && apt-get install -y -qq $missing
+        else
+          echo "Missing required tools:$missing. Install them on the runner host (shell executor has no root)." >&2
+          exit 1
+        fi
+      fi
   script:
     - |
       set -euo pipefail
@@ -46,11 +59,12 @@
       echo "MR merged successfully."
       sleep 10
       # Clone base branch (post-merge), tag, push
-      git config --global user.email "gitlab-ci@gitlab.com"
-      git config --global user.name "GitLab CI"
       REPO_URL="https://oauth2:${RELEASE_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
       git clone --branch "${MERGE_RELEASE_BASE_BRANCH}" --single-branch --depth 50 "$REPO_URL" "$REPO_DIR"
       cd "$REPO_DIR"
+      # Use local (repo-scoped) git config to avoid writing to $HOME on shell executors.
+      git config user.email "gitlab-ci@gitlab.com"
+      git config user.name "GitLab CI"
       git fetch origin "${MERGE_RELEASE_BASE_BRANCH}"
       git reset --hard "origin/${MERGE_RELEASE_BASE_BRANCH}"
       if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
