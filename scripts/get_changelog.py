@@ -9,7 +9,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import json
 
 import requests
@@ -222,29 +222,52 @@ def get_changelog_files(module_path: str) -> List[Tuple[str, str]]:
     return changelog_files
 
 
-def read_changelog(file_path: str) -> str:
-    """Reads changelog file content."""
+def _changelog_entry_to_str(entry: Any) -> str:
+    """
+    Turn one YAML changelog list item into a single line of text.
+
+    Changelog YAML often mixes plain strings and single-key dicts (when a line
+    contains `Key: value` after `-`, PyYAML parses it as a mapping).
+    """
+    if isinstance(entry, str):
+        return entry
+    if isinstance(entry, dict):
+        parts = []
+        for k, v in entry.items():
+            if isinstance(v, (dict, list)):
+                parts.append(f"{k}: {json.dumps(v, ensure_ascii=False)}")
+            else:
+                parts.append(f"{k}: {v}")
+        return "; ".join(parts)
+    return str(entry)
+
+
+def read_changelog(file_path: str) -> List[str]:
+    """Reads changelog file content as a list of bullet lines."""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = yaml.safe_load(f)
-            
-        # Format changelog for output
+
         if isinstance(content, dict):
-            # Check Russian keys
-            if 'Изменения' in content.keys():
+            if 'Изменения' in content:
                 changes = content['Изменения']
-            elif 'Changes' in content.keys():
+            elif 'Changes' in content:
                 changes = content['Changes']
             else:
-                return str(content)
+                return [str(content)]
 
-            return(changes)
-                
-        else:
-            return str(content)
-            
+            if changes is None:
+                return []
+            if isinstance(changes, str):
+                return [changes]
+            if isinstance(changes, list):
+                return [_changelog_entry_to_str(item) for item in changes]
+            return [_changelog_entry_to_str(changes)]
+
+        return [str(content)]
+
     except Exception as e:
-        return f"File reading error: {e}"
+        return [f"File reading error: {e}"]
 
 
 def get_latest_tag_from_changelogs(module_path: str) -> Optional[str]:
@@ -266,10 +289,10 @@ def get_latest_tag_from_changelogs(module_path: str) -> Optional[str]:
     return latest_version
 
 
-def get_newer_changelogs(module_path: str, current_version: str) -> List[Tuple[str, str]]:
+def get_newer_changelogs(module_path: str, current_version: str) -> List[Tuple[str, List[str]]]:
     """
     Gets changelog files newer than the specified version.
-    Returns list of tuples (version, changelog_content).
+    Returns list of tuples (version, changelog bullet lines).
     """
     changelog_files = get_changelog_files(module_path)
     newer_changelogs = []
@@ -330,6 +353,7 @@ def main():
         'https://github.com/deckhouse/csi-nfs',
         'https://github.com/deckhouse/csi-ceph',
         'https://github.com/deckhouse/snapshot-controller',
+        'https://github.com/deckhouse/state-snapshotter',
         'https://fox.flant.com/deckhouse/storage/csi-yadro-tatlin-unified',
         'https://fox.flant.com/deckhouse/storage/csi-netapp',
         'https://fox.flant.com/deckhouse/storage/csi-hpe',
