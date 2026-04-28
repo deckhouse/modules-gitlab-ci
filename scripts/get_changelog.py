@@ -353,6 +353,7 @@ def main():
         'https://github.com/deckhouse/csi-nfs',
         'https://github.com/deckhouse/csi-ceph',
         'https://github.com/deckhouse/snapshot-controller',
+        'https://github.com/deckhouse/state-snapshotter',
         'https://fox.flant.com/deckhouse/storage/csi-yadro-tatlin-unified',
         'https://fox.flant.com/deckhouse/storage/csi-netapp',
         'https://fox.flant.com/deckhouse/storage/csi-hpe',
