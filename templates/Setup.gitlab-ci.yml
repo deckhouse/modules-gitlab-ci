@@ -77,18 +77,18 @@ before_script:
 
   # Add ssh keys
   - |
-    if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
-      SVACE_ANALYZE_SSH_PRIVATE_KEY_B64=$(echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" | base64 -d)
-    fi
     if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
+      SVACE_ANALYZE_SSH_PRIVATE_KEY=$(echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d)
+    fi
 
+    if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
       eval $(ssh-agent)
       trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
       export SSH_KNOWN_HOSTS=~/.ssh/known_hosts
       mkdir -p ~/.ssh
       touch ~/.ssh/known_hosts
 
-      echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d | ssh-add -
+      echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" | ssh-add -
       if [[ -n "${SVACE_ANALYZE_HOST}" ]]; then
         echo "Adding svace ssh key (ignoring errors)."
         set +e
