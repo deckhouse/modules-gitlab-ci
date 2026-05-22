@@ -38,7 +38,11 @@
           echo "Using new ssh auth sock: ${SSH_AUTH_SOCK}"
       fi
 
-      echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d | ssh-add -
+      if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
+        SVACE_ANALYZE_SSH_PRIVATE_KEY=$(echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d)
+      fi
+
+      echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" | ssh-add -
 
     # Add Svace analyze host to known_hosts
     - |
