@@ -5,8 +5,6 @@
 #   $DEV_MODULES_REGISTRY - dev registry path
 #   $DEV_MODULES_REGISTRY_LOGIN - login to dev registry
 #   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
-#   $SOURCE_REPO - Source repository address for the module
-#   $SOURCE_REPO_SSH_KEY - SSH private key for the source repository
 #   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
 #   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
 #   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
@@ -79,10 +77,7 @@ before_script:
 
   # Add ssh keys
   - |
-    if [[ -n "${SOURCE_REPO_SSH_KEY_B64}" ]]; then
-      SOURCE_REPO_SSH_KEY=$(echo "${SOURCE_REPO_SSH_KEY_B64}" | base64 -d)
-    fi
-    if [[ -n "${SOURCE_REPO_SSH_KEY}" || -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
+    if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
 
       eval $(ssh-agent)
       trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
@@ -90,36 +85,21 @@ before_script:
       mkdir -p ~/.ssh
       touch ~/.ssh/known_hosts
 
-      if [[ -n "${SOURCE_REPO_SSH_KEY}" ]]; then
-        ssh-add - <<< "${SOURCE_REPO_SSH_KEY}"
-        if [[ -n "${SOURCE_REPO}" ]]; then
-          HOST=$(grep -oP '(?<=@)[^/:]+' <<< ${SOURCE_REPO})
-          HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
-          while IFS= read -r KEY_LINE; do
-            CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
-            if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
-              echo "$KEY_LINE" >> ~/.ssh/known_hosts
-            fi
-          done <<< "$HOST_KEYS"
-        fi
+      echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d | ssh-add -
+      if [[ -n "${SVACE_ANALYZE_HOST}" ]]; then
+        echo "Adding svace ssh key (ignoring errors)."
+        set +e
+        HOST=${SVACE_ANALYZE_HOST}
+        HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
+        while IFS= read -r KEY_LINE; do
+          CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
+          if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
+            echo "$KEY_LINE" >> ~/.ssh/known_hosts
+          fi
+        done <<< "$HOST_KEYS"
+        set -e
       fi
 
-      if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
-        echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d | ssh-add -
-        if [[ -n "${SVACE_ANALYZE_HOST}" ]]; then
-          echo "Adding svace ssh key (ignoring errors)."
-          set +e
-          HOST=${SVACE_ANALYZE_HOST}
-          HOST_KEYS=$(ssh-keyscan -H "$HOST" 2>/dev/null)
-          while IFS= read -r KEY_LINE; do
-            CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
-            if ! grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
-              echo "$KEY_LINE" >> ~/.ssh/known_hosts
-            fi
-          done <<< "$HOST_KEYS"
-          set -e
-        fi
-      fi
     fi
 
 stages:
