@@ -77,6 +77,9 @@ before_script:
 
   # Add ssh keys
   - |
+    if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
+      SVACE_ANALYZE_SSH_PRIVATE_KEY_B64=$(echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" | base64 -d)
+    fi
     if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
 
       eval $(ssh-agent)
