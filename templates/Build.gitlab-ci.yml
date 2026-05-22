@@ -32,7 +32,9 @@ variables:
   script:
     # Use gitlab ci job token
     - |
-      export SOURCE_REPO=https://gitlab-ci-token:${CI_JOB_TOKEN}@${SOURCE_REPO#git@}
+      SOURCE_REPO=${SOURCE_REPO#git@}
+      SOURCE_REPO=${SOURCE_REPO//://}
+      export SOURCE_REPO=https://gitlab-ci-token:${CI_JOB_TOKEN}@${SOURCE_REPO}
 
     # Build images
     - |
