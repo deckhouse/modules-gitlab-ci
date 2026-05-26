@@ -30,6 +30,12 @@ variables:
 .build:
   stage: build
   script:
+    # Use gitlab ci job token
+    - |
+      SOURCE_REPO=${SOURCE_REPO#git@}
+      SOURCE_REPO=${SOURCE_REPO//://}
+      export SOURCE_REPO=https://gitlab-ci-token:${CI_JOB_TOKEN}@${SOURCE_REPO}
+
     # Build images
     - |
       werf build \
