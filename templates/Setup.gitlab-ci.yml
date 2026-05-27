@@ -22,6 +22,12 @@ variables:
   WERF_VERSION: "2 stable"
 
 before_script:
+  # Setup docker config dir
+  - |
+    docker_dir=$(mktemp -d)
+    export DOCKER_CONFIG=$docker_dir
+    trap 'rm -rf "$docker_dir"' ERR EXIT HUP INT QUIT TERM
+
   # Setup trdl
   - |
     TRDL_ROOT="${HOME}/.trdl"
