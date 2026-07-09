@@ -17,17 +17,26 @@ variables:
       - "true"
       - "false"
 
-.lint:
+# `.lint_base` holds the body only (no `rules:`) so consuming projects can add
+# their own gating via a context mixin, e.g. `extends: [.lint_base, .dev]`, the
+# same convention as `.go_linter` / `.cve_scan`. `.lint` keeps the previous
+# behavior (fires on any branch/tag) for existing consumers.
+.lint_base:
   stage: build
   script:
     - |
       dmt lint ./
+  allow_failure: true
+
+.lint:
+  extends: .lint_base
   rules:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
-  allow_failure: true
 
-.build:
+# `.build_base` holds the body only (no `rules:`); see `.lint_base` above.
+# `.build` re-adds the default any-branch/tag gating for existing consumers.
+.build_base:
   stage: build
   script:
     # Use gitlab ci job token
@@ -73,6 +82,9 @@ variables:
         --oci-empty-base \
         --new_layer "" \
         --new_tag "${MODULES_MODULE_SOURCE}:${MODULES_MODULE_NAME}"
+
+.build:
+  extends: .build_base
   rules:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
