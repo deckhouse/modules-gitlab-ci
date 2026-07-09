@@ -4,7 +4,12 @@
 #   $RELEASE_CHANNEL - lowercase release channel name, e.g., alpha, stable, early-access
 
 
-.deploy:
+# `.deploy_base` holds the body only (no `rules:` / `when:`) so consuming
+# projects can drive gating from their own context mixin, e.g.
+# `extends: [.deploy_base, .prod_manual]`, matching the `.go_linter` /
+# `.cve_scan` convention. `.deploy` keeps the previous behavior (manual, on
+# tag) for existing consumers.
+.deploy_base:
   stage: deploy
   script:
   - |
@@ -15,6 +20,9 @@
 
     echo "✨ Pushing ${IMAGE_SRC} to ${IMAGE_DST}"
     crane copy "${IMAGE_SRC}" "${IMAGE_DST}"
+
+.deploy:
+  extends: .deploy_base
   rules:
     - if: $CI_COMMIT_TAG
   when: manual
