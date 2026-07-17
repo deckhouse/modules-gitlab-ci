@@ -27,7 +27,7 @@
 #     - project: "deckhouse/3p/deckhouse/modules-gitlab-ci"
 #       ref: "v13.0"
 #       file:
-#         - "/templates/E2E.gitlab-ci.yml"   # <-- the one line
+#         - "/templates/storage-e2e.gitlab-ci.yml"   # <-- the one line
 #
 #   stages:
 #     - ...
@@ -198,7 +198,11 @@ e2e_resolve:
       set -euo pipefail
       labels="${CI_MERGE_REQUEST_LABELS:-}"
 
-      namespace="e2e-${E2E_MODULE_SLUG}-mr${CI_MERGE_REQUEST_IID}"
+      # Append a random 4-char hex suffix (e.g. -a5b6) so every run gets a
+      # UNIQUE cluster/namespace name — two runs of the same MR no longer collide
+      # on one cluster. All phases share this value via the dotenv artifact.
+      suffix="$(printf '%04x' "$((RANDOM))")"
+      namespace="e2e-${E2E_MODULE_SLUG}-mr${CI_MERGE_REQUEST_IID}-${suffix}"
 
       keep_cluster=false
       case ",${labels}," in
