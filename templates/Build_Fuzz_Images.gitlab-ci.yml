@@ -8,11 +8,6 @@
 #                      (no registry push, no build-report upload)
 #   - build_fuzz_main: push to registry + upload images_fuzz_tags_werf.json
 #
-# Required CI/CD variables:
-#   FUZZ_S3_ENDPOINT
-#   FUZZ_S3_ACCESS_KEY
-#   FUZZ_S3_SECRET_KEY
-#
 # Auth / werf ci-env / base_images come from Setup `before_script` (same as `.build`).
 # Registry variables (MODULES_MODULE_SOURCE, etc.) must be provided by the consumer
 # via a mixin (e.g. `.dev-variables` / `.dev`).
@@ -21,6 +16,19 @@
   stage: build
   variables:
     WERF_FINAL_IMAGES_ONLY: "false"
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://seguro.flant.com
+  secrets:
+    FUZZ_S3_ENDPOINT:
+      vault: team-ssdlc/fuzzing-s3/FUZZ_S3_ENDPOINT@projects/6db2f1ee-9b6f-4f4f-8381-2fb43060478a/secret
+      file: false
+    FUZZ_S3_ACCESS_KEY:
+      vault: team-ssdlc/fuzzing-s3/FUZZ_S3_ACCESS_KEY@projects/6db2f1ee-9b6f-4f4f-8381-2fb43060478a/secret
+      file: false
+    FUZZ_S3_SECRET_KEY:
+      vault: team-ssdlc/fuzzing-s3/FUZZ_S3_SECRET_KEY@projects/6db2f1ee-9b6f-4f4f-8381-2fb43060478a/secret
+      file: false
 
 .build_fuzz_dev:
   extends:
@@ -42,7 +50,7 @@
       unset WERF_FINAL_IMAGES_ONLY
 
       # PR/dev: build locally, do not push fuzz images; no build-report upload.
-      # Corpus replay always uses main (PR builds never publish corpus).
+      # Corpus replay always uses main (PR builds never publish image).
       unset WERF_REPO
       export FUZZ_S3_REPOSITORY="${CI_PROJECT_NAME}"
       export FUZZ_S3_BRANCH_SLUG="main"
