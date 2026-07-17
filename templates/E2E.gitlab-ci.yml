@@ -1,0 +1,298 @@
+# Reusable storage-module E2E pipeline (GitLab port of the storage-e2e
+# `.github/workflows/e2e.yml` reusable workflow).
+#
+# It reproduces the four-phase flow driven by the `storage-e2e` framework:
+#
+#   e2e_resolve --> e2e_bootstrap --> e2e_run --> e2e_teardown
+#
+#   resolve   parses the MR labels into the per-MR namespace, the Ginkgo label
+#             filter and the keep-cluster flag; exports them as a dotenv artifact.
+#   bootstrap `go run ./cmd/bootstrap-cluster` — creates a fresh cluster through
+#             the provider (commander) AND enables the modules-under-test from
+#             the cluster config (module enablement happens in-process).
+#   run       clones storage-e2e, injects the provider connection env and runs
+#             the module's Ginkgo suite via storage-e2e's e2e-run-tests.sh.
+#   teardown  `go run ./cmd/remove-cluster` — always runs (unless keep-cluster),
+#             regardless of the run result, so clusters are never leaked.
+#
+# The whole body lives here; a consuming module connects it with a single
+# include line and adds the two e2e stages. Everything runs on the runner tagged
+# `storage-test` and skips the module's default (werf/trdl) before_script.
+#
+# --------------------------------------------------------------------------
+# Usage in a module `.gitlab-ci.yml`
+# --------------------------------------------------------------------------
+#
+#   include:
+#     - project: "deckhouse/3p/deckhouse/modules-gitlab-ci"
+#       ref: "v13.0"
+#       file:
+#         - "/templates/E2E.gitlab-ci.yml"   # <-- the one line
+#
+#   stages:
+#     - ...
+#     - e2e
+#     - e2e_teardown
+#
+# The suite fires only on a merge request carrying the `e2e/commander/run`
+# label. Other labels: `e2e/keep-cluster` (skip teardown), `e2e/label:<suite>`
+# (Ginkgo label filter; multiple joined with " || ").
+#
+# --------------------------------------------------------------------------
+# Configuration (override via CI/CD variables; sensible defaults below)
+# --------------------------------------------------------------------------
+#   E2E_MODULE_SLUG        module slug used in the namespace   (default: $CI_PROJECT_NAME)
+#   E2E_MODULE_PATH        path to the Go module with tests    (default: e2e)
+#   E2E_TEST_PACKAGE       Go package to test                  (default: ./tests/)
+#   E2E_CLUSTER_CONFIG     cluster YAML (relative to repo)     (default: e2e/tests/cluster_config.ci.yml)
+#   E2E_CLUSTER_PROVIDER   provider: commander | dvp           (default: commander)
+#   E2E_STORAGE_E2E_REPO   storage-e2e git URL                 (default: https://github.com/deckhouse/storage-e2e.git)
+#   E2E_STORAGE_E2E_REF    storage-e2e git ref                 (default: main)
+#   E2E_MODULE_IMAGE_TAG   module image tag under test         (default: mr${CI_MERGE_REQUEST_IID})
+#   E2E_DEFAULT_LABEL_FILTER default Ginkgo filter             (default: !stress-test)
+#   E2E_GO_BOOTSTRAP_VERSION Go toolchain to fetch if absent   (default: 1.26.4)
+#   E2E_GO_TEST_TIMEOUT    go test -timeout                    (default: 3h30m)
+#
+# --------------------------------------------------------------------------
+# Required CI/CD variables (commander provider) — set at group/project level
+# --------------------------------------------------------------------------
+#   E2E_COMMANDER_URL, E2E_COMMANDER_TOKEN, E2E_COMMANDER_TEMPLATE_NAME
+#   E2E_COMMANDER_SSH_USER + the SSH private key (see below)
+#   (optional) E2E_COMMANDER_TEMPLATE_VERSION, E2E_COMMANDER_REGISTRY_NAME,
+#              E2E_COMMANDER_VALUES, E2E_COMMANDER_AUTH_METHOD,
+#              E2E_COMMANDER_API_PREFIX, E2E_COMMANDER_INSECURE_SKIP_TLS_VERIFY,
+#              E2E_COMMANDER_WAIT_TIMEOUT, E2E_COMMANDER_SSH_JUMP_*, GOPROXY
+#
+# Self-signed Commander certificate: set E2E_COMMANDER_INSECURE_SKIP_TLS_VERIFY
+# to "true" to skip TLS verification of the Commander API entirely — no CA
+# needed. Alternatively pin the CA via E2E_COMMANDER_CA_CERT[_B64] (see below).
+#
+# Multi-line secrets: GitLab masked variables cannot contain whitespace, so the
+# SSH private keys and the CA cert are supplied base64-encoded on a single line
+# (encode with `base64 -w0`) and decoded automatically:
+#   E2E_COMMANDER_SSH_PRIVATE_KEY_B64        (required)
+#   E2E_COMMANDER_SSH_JUMP_PRIVATE_KEY_B64   (optional, bastion)
+#   E2E_COMMANDER_CA_CERT_B64                (optional; decoded to a file since
+#                                            E2E_COMMANDER_CA_CERT is a path)
+# The raw E2E_COMMANDER_SSH_PRIVATE_KEY (content) / E2E_COMMANDER_CA_CERT (path)
+# are still honoured if set (e.g. via a File-type variable) and take precedence
+# over the *_B64 form.
+#
+# The cluster name (E2E_COMMANDER_CLUSTER_NAME) is set by the pipeline to the
+# per-MR namespace and must NOT be overridden.
+
+variables:
+  E2E_MODULE_SLUG: "${CI_PROJECT_NAME}"
+  E2E_MODULE_PATH: "e2e"
+  E2E_TEST_PACKAGE: "./tests/"
+  E2E_CLUSTER_CONFIG: "e2e/tests/cluster_config.ci.yml"
+  E2E_CLUSTER_PROVIDER: "commander"
+  E2E_STORAGE_E2E_REPO: "https://github.com/deckhouse/storage-e2e.git"
+  E2E_STORAGE_E2E_REF: "main"
+  E2E_MODULE_IMAGE_TAG: "mr${CI_MERGE_REQUEST_IID}"
+  E2E_DEFAULT_LABEL_FILTER: "!stress-test"
+  E2E_GO_BOOTSTRAP_VERSION: "1.26.4"
+  E2E_GO_TEST_TIMEOUT: "3h30m"
+  # Set to "true" to trust a self-signed Commander certificate WITHOUT providing
+  # a CA (skips TLS verification of the Commander API). Leave "false" and use
+  # E2E_COMMANDER_CA_CERT[_B64] to pin the CA instead. Override with a project
+  # CI/CD variable (which takes precedence over this default).
+  E2E_COMMANDER_INSECURE_SKIP_TLS_VERIFY: "false"
+
+# Gate: the reusable jobs only exist on a merge request carrying the
+# `e2e/commander/run` label. Consumers reference this from every e2e job.
+.e2e_rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /(^|,)e2e\/commander\/run(,|$)/'
+
+# Common base for every e2e job: the storage-test runner, no werf/trdl
+# before_script, and a self-contained Go toolchain bootstrap. before_script and
+# script share one shell on the shell executor, so the exports below persist
+# into script.
+.e2e_base:
+  tags:
+    - storage-test
+  rules:
+    - !reference [.e2e_rules, rules]
+  before_script:
+    - |
+      set -euo pipefail
+      # Ensure a Go toolchain is available on the shell runner. GOTOOLCHAIN=auto
+      # then upgrades to whatever the module's go.mod pins.
+      GO_VER="${E2E_GO_BOOTSTRAP_VERSION}"
+      GO_ROOT="${CI_PROJECT_DIR}/.e2e-go"
+      if ! command -v go >/dev/null 2>&1; then
+        if [ ! -x "${GO_ROOT}/go/bin/go" ]; then
+          echo "Installing Go ${GO_VER} into ${GO_ROOT}"
+          mkdir -p "${GO_ROOT}"
+          curl -fsSL "https://go.dev/dl/go${GO_VER}.linux-amd64.tar.gz" | tar -C "${GO_ROOT}" -xz
+        fi
+        export PATH="${GO_ROOT}/go/bin:${PATH}"
+      fi
+      export GOTOOLCHAIN=auto
+      export GOMODCACHE="${CI_PROJECT_DIR}/.e2e-gomodcache"
+      export GOCACHE="${CI_PROJECT_DIR}/.e2e-gocache"
+      mkdir -p "${GOMODCACHE}" "${GOCACHE}"
+      go version
+
+      # GitLab masked variables cannot contain whitespace/newlines, so multi-line
+      # secrets (SSH private keys, CA cert) are provided base64-encoded on a
+      # single line as *_B64 variables and decoded here into the raw vars
+      # storage-e2e expects. Encode with `base64 -w0` (no line wrapping) so the
+      # stored value stays maskable. A raw var, if already set, is left untouched.
+      # SSH private keys are consumed as inline CONTENT, so decode into the var.
+      decode_b64() { # decode_b64 <target_var_name> <b64_value>
+        local __t="$1" __v="$2"
+        [ -n "${__v}" ] || return 0
+        [ -z "${!__t:-}" ] || return 0
+        export "${__t}=$(printf '%s' "${__v}" | base64 -d)"
+      }
+      decode_b64 E2E_COMMANDER_SSH_PRIVATE_KEY "${E2E_COMMANDER_SSH_PRIVATE_KEY_B64:-}"
+      decode_b64 E2E_COMMANDER_SSH_JUMP_PRIVATE_KEY "${E2E_COMMANDER_SSH_JUMP_PRIVATE_KEY_B64:-}"
+      # E2E_COMMANDER_CA_CERT is a FILE PATH (storage-e2e os.ReadFile), so decode
+      # the base64 cert to a file and point the var at it. Only when pinning a CA;
+      # with E2E_COMMANDER_INSECURE_SKIP_TLS_VERIFY=true no CA is needed at all.
+      if [ -n "${E2E_COMMANDER_CA_CERT_B64:-}" ] && [ -z "${E2E_COMMANDER_CA_CERT:-}" ]; then
+        __ca="${CI_PROJECT_DIR}/.e2e-commander-ca.crt"
+        printf '%s' "${E2E_COMMANDER_CA_CERT_B64}" | base64 -d > "${__ca}"
+        export E2E_COMMANDER_CA_CERT="${__ca}"
+      fi
+
+# Clone storage-e2e at the requested ref into _storage-e2e. Sourced by the
+# jobs that need the framework (bootstrap/run/teardown).
+.e2e_clone_storage_e2e: &e2e_clone_storage_e2e
+  - |
+    rm -rf "${CI_PROJECT_DIR}/_storage-e2e"
+    git clone --quiet "${E2E_STORAGE_E2E_REPO}" "${CI_PROJECT_DIR}/_storage-e2e"
+    git -C "${CI_PROJECT_DIR}/_storage-e2e" checkout --quiet "${E2E_STORAGE_E2E_REF}"
+    git -C "${CI_PROJECT_DIR}/_storage-e2e" rev-parse HEAD
+
+# --------------------------------------------------------------------------
+# resolve: MR labels -> namespace / ginkgo filter / keep-cluster (dotenv)
+# --------------------------------------------------------------------------
+e2e_resolve:
+  extends: .e2e_base
+  stage: e2e
+  script:
+    - |
+      set -euo pipefail
+      labels="${CI_MERGE_REQUEST_LABELS:-}"
+
+      namespace="e2e-${E2E_MODULE_SLUG}-mr${CI_MERGE_REQUEST_IID}"
+
+      keep_cluster=false
+      case ",${labels}," in
+        *,e2e/keep-cluster,*) keep_cluster=true ;;
+      esac
+
+      # e2e/label:<x> labels -> Ginkgo filter, joined with " || ".
+      ginkgo_filter=""
+      IFS=',' read -ra parts <<< "${labels}"
+      for l in "${parts[@]}"; do
+        case "$l" in
+          e2e/label:*)
+            v="${l#e2e/label:}"
+            if [ -z "${ginkgo_filter}" ]; then ginkgo_filter="${v}"; else ginkgo_filter="${ginkgo_filter} || ${v}"; fi
+            ;;
+        esac
+      done
+      if [ -z "${ginkgo_filter}" ]; then ginkgo_filter="${E2E_DEFAULT_LABEL_FILTER}"; fi
+
+      {
+        echo "E2E_NAMESPACE=${namespace}"
+        echo "E2E_GINKGO_FILTER=${ginkgo_filter}"
+        echo "E2E_KEEP_CLUSTER=${keep_cluster}"
+      } > e2e.env
+      echo "Resolved: namespace=${namespace} keep_cluster=${keep_cluster} ginkgo_filter='${ginkgo_filter}'"
+  artifacts:
+    reports:
+      dotenv: e2e.env
+
+# --------------------------------------------------------------------------
+# bootstrap: create the cluster and enable the modules-under-test
+# --------------------------------------------------------------------------
+e2e_bootstrap:
+  extends: .e2e_base
+  stage: e2e
+  needs:
+    - job: e2e_resolve
+      artifacts: true
+  timeout: 90m
+  script:
+    - *e2e_clone_storage_e2e
+    - |
+      set -euo pipefail
+      export E2E_TEST_CLUSTER_PROVIDER="${E2E_CLUSTER_PROVIDER}"
+      export E2E_CLUSTER_CONFIG_YAML_PATH="${CI_PROJECT_DIR}/${E2E_CLUSTER_CONFIG}"
+      export E2E_COMMANDER_CLUSTER_NAME="${E2E_NAMESPACE}"
+      export E2E_MODULE_IMAGE_TAG="${E2E_MODULE_IMAGE_TAG}"
+      cd "${CI_PROJECT_DIR}/_storage-e2e"
+      go run ./cmd/bootstrap-cluster
+
+# --------------------------------------------------------------------------
+# run: inject the provider connection env and run the Ginkgo suite
+# --------------------------------------------------------------------------
+e2e_run:
+  extends: .e2e_base
+  stage: e2e
+  needs:
+    - job: e2e_resolve
+      artifacts: true
+    - job: e2e_bootstrap
+      artifacts: false
+  timeout: 240m
+  script:
+    - *e2e_clone_storage_e2e
+    - |
+      set -euo pipefail
+      # Connection env for cluster.CreateOrConnectToTestCluster() (commander
+      # connector runs in-process: SSH via the bastion, kubeconfig off the
+      # master, API tunnel). Mirrors the GitHub "Configure commander connection"
+      # step. E2E_COMMANDER_* come from CI/CD variables.
+      export E2E_TEST_CLUSTER_PROVIDER="${E2E_CLUSTER_PROVIDER}"
+      export TEST_CLUSTER_CREATE_MODE="${E2E_CLUSTER_PROVIDER}"
+      export TEST_CLUSTER_NAMESPACE="${E2E_NAMESPACE}"
+      export E2E_COMMANDER_CLUSTER_NAME="${E2E_NAMESPACE}"
+      export E2E_CLUSTER_CONFIG_YAML_PATH="${CI_PROJECT_DIR}/${E2E_CLUSTER_CONFIG}"
+
+      export E2E_MODULE_PATH="${E2E_MODULE_PATH}"
+      export E2E_TEST_PACKAGE="${E2E_TEST_PACKAGE}"
+      export E2E_GINKGO_LABEL_FILTER="${E2E_GINKGO_FILTER}"
+      export E2E_STORAGE_E2E_DIR="${CI_PROJECT_DIR}/_storage-e2e"
+      export E2E_GO_TEST_TIMEOUT="${E2E_GO_TEST_TIMEOUT}"
+      export GITHUB_WORKSPACE="${CI_PROJECT_DIR}"
+      bash "${CI_PROJECT_DIR}/_storage-e2e/.github/scripts/e2e-run-tests.sh"
+  artifacts:
+    when: always
+    paths:
+      - e2e-test-output.log
+    expire_in: 7 days
+
+# --------------------------------------------------------------------------
+# teardown: always remove the cluster (unless e2e/keep-cluster)
+# --------------------------------------------------------------------------
+e2e_teardown:
+  extends: .e2e_base
+  stage: e2e_teardown
+  # No needs: rely on stage ordering (runs after the whole `e2e` stage) and
+  # inherit the resolve dotenv from the earlier stage. when: always so the
+  # cluster is torn down regardless of the run result.
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /(^|,)e2e\/commander\/run(,|$)/'
+      when: always
+  timeout: 60m
+  script:
+    - |
+      set -euo pipefail
+      if [ "${E2E_KEEP_CLUSTER:-false}" = "true" ]; then
+        echo "e2e/keep-cluster label set; skipping cluster teardown"
+        exit 0
+      fi
+    - *e2e_clone_storage_e2e
+    - |
+      set -euo pipefail
+      export E2E_TEST_CLUSTER_PROVIDER="${E2E_CLUSTER_PROVIDER}"
+      export E2E_CLUSTER_CONFIG_YAML_PATH="${CI_PROJECT_DIR}/${E2E_CLUSTER_CONFIG}"
+      export E2E_COMMANDER_CLUSTER_NAME="${E2E_NAMESPACE}"
+      cd "${CI_PROJECT_DIR}/_storage-e2e"
+      go run ./cmd/remove-cluster
