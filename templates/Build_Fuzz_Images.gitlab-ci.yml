@@ -18,7 +18,7 @@
     WERF_FINAL_IMAGES_ONLY: "false"
   id_tokens:
     VAULT_ID_TOKEN:
-      aud: https://seguro.flant.com
+      aud: gitlab-access-aud
   secrets:
     FUZZ_S3_ENDPOINT:
       vault: team-ssdlc/fuzzing-s3/FUZZ_S3_ENDPOINT@projects/6db2f1ee-9b6f-4f4f-8381-2fb43060478a/secret
