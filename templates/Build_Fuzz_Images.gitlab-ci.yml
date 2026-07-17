@@ -146,4 +146,3 @@
       "${MC}" cp \
         "images_fuzz_tags_werf.json" \
         "fuzz-s3/anomaloys-materials/build-reports/${REPOSITORY}/${BRANCH_SLUG}/images_fuzz_tags_werf.json"
-c
