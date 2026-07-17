@@ -114,25 +114,45 @@ variables:
     - storage-test
   rules:
     - !reference [.e2e_rules, rules]
+  variables:
+    # storage-test is a shell runner with a PERSISTENT workspace. Go marks its
+    # module-cache dirs read-only (0555), which makes GitLab's `git clean`
+    # between jobs fail with "Permission denied" and abort the job. We keep all
+    # Go caches OUTSIDE the checkout (below) and disable the destructive clean;
+    # before_script purges anything a previous run left behind.
+    GIT_CLEAN_FLAGS: none
   before_script:
     - |
       set -euo pipefail
+      # Purge stale caches/clones a previous revision may have left INSIDE the
+      # checkout (older templates put GOMODCACHE here). chmod +w first because Go
+      # cache dirs are read-only, otherwise rm can't descend into them.
+      for d in .e2e-go .e2e-gomodcache .e2e-gocache _storage-e2e; do
+        if [ -e "${CI_PROJECT_DIR}/${d}" ]; then
+          chmod -R u+w "${CI_PROJECT_DIR}/${d}" 2>/dev/null || true
+          rm -rf "${CI_PROJECT_DIR}/${d}" 2>/dev/null || true
+        fi
+      done
+
+      # All Go state lives OUTSIDE the checkout on the runner so it never trips
+      # git clean and is reused across jobs.
+      E2E_CACHE_ROOT="${HOME:-/home/gitlab-runner}/.cache/storage-e2e-ci"
+      GO_ROOT="${E2E_CACHE_ROOT}/go"
+      export GOMODCACHE="${E2E_CACHE_ROOT}/gomodcache"
+      export GOCACHE="${E2E_CACHE_ROOT}/gocache"
+      mkdir -p "${GO_ROOT}" "${GOMODCACHE}" "${GOCACHE}"
+
       # Ensure a Go toolchain is available on the shell runner. GOTOOLCHAIN=auto
       # then upgrades to whatever the module's go.mod pins.
       GO_VER="${E2E_GO_BOOTSTRAP_VERSION}"
-      GO_ROOT="${CI_PROJECT_DIR}/.e2e-go"
       if ! command -v go >/dev/null 2>&1; then
         if [ ! -x "${GO_ROOT}/go/bin/go" ]; then
           echo "Installing Go ${GO_VER} into ${GO_ROOT}"
-          mkdir -p "${GO_ROOT}"
           curl -fsSL "https://go.dev/dl/go${GO_VER}.linux-amd64.tar.gz" | tar -C "${GO_ROOT}" -xz
         fi
         export PATH="${GO_ROOT}/go/bin:${PATH}"
       fi
       export GOTOOLCHAIN=auto
-      export GOMODCACHE="${CI_PROJECT_DIR}/.e2e-gomodcache"
-      export GOCACHE="${CI_PROJECT_DIR}/.e2e-gocache"
-      mkdir -p "${GOMODCACHE}" "${GOCACHE}"
       go version
 
       # GitLab masked variables cannot contain whitespace/newlines, so multi-line
