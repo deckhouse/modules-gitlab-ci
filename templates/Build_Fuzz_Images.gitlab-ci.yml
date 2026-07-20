@@ -78,6 +78,8 @@
 
       echo "Cleaning local werf host cache after fuzz_dev build"
       werf host cleanup
+
+.build_fuzz_main:
   extends:
     - .build_fuzz
   variables:
