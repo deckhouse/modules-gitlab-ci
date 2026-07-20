@@ -54,12 +54,13 @@
 
       unset WERF_FINAL_IMAGES_ONLY
 
-      # PR/dev: build locally, do not push fuzz images; no build-report upload.
+      # PR/dev: do not push to primary repo; read stages from dev registry cache.
       # Corpus replay always uses main (PR builds never publish image).
       unset WERF_REPO
+      export WERF_SECONDARY_REPO="${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}"
       export FUZZ_S3_REPOSITORY="${CI_PROJECT_NAME}"
       export FUZZ_S3_BRANCH_SLUG="main"
-      echo "dev fuzz build: local only (no registry push, no build-report upload)"
+      echo "dev fuzz build: local primary, secondary cache ${WERF_SECONDARY_REPO} (no push, no build-report upload)"
       echo "Corpus replay path prefix: anomaloys-materials/${FUZZ_S3_REPOSITORY}/${FUZZ_S3_BRANCH_SLUG}/"
 
       FUZZ_IMAGES="$(werf config list | grep -- '-fuzz$' || true)"
