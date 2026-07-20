@@ -16,18 +16,23 @@
   stage: build
   variables:
     WERF_FINAL_IMAGES_ONLY: "false"
+    VAULT_SERVER_URL: https://seguro.flant.com
+    VAULT_AUTH_PATH: fox
   id_tokens:
     VAULT_ID_TOKEN:
       aud: gitlab-access-aud
   secrets:
     FUZZ_S3_ENDPOINT:
-      vault: team-ssdlc/fuzzing-s3/FUZZ_S3_ENDPOINT@projects/6db2f1ee-9b6f-4f4f-8381-2fb43060478a/secret
+      vault: 6db2f1ee-9b6f-4f4f-8381-2fb43060478a/team-ssdlc/fuzzing-s3/FUZZ_S3_ENDPOINT@projects
+      token: $VAULT_ID_TOKEN
       file: false
     FUZZ_S3_ACCESS_KEY:
-      vault: team-ssdlc/fuzzing-s3/FUZZ_S3_ACCESS_KEY@projects/6db2f1ee-9b6f-4f4f-8381-2fb43060478a/secret
+      vault: 6db2f1ee-9b6f-4f4f-8381-2fb43060478a/team-ssdlc/fuzzing-s3/FUZZ_S3_ACCESS_KEY@projects
+      token: $VAULT_ID_TOKEN
       file: false
     FUZZ_S3_SECRET_KEY:
-      vault: team-ssdlc/fuzzing-s3/FUZZ_S3_SECRET_KEY@projects/6db2f1ee-9b6f-4f4f-8381-2fb43060478a/secret
+      vault: 6db2f1ee-9b6f-4f4f-8381-2fb43060478a/team-ssdlc/fuzzing-s3/FUZZ_S3_SECRET_KEY@projects
+      token: $VAULT_ID_TOKEN
       file: false
 
 .build_fuzz_dev:
