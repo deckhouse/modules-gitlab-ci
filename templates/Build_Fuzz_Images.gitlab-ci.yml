@@ -76,7 +76,8 @@
       werf build ${FUZZ_IMAGES} \
         --save-build-report --build-report-path images_fuzz_tags_werf.json
 
-.build_fuzz_main:
+      echo "Cleaning local werf host cache after fuzz_dev build"
+      werf host cleanup
   extends:
     - .build_fuzz
   variables:
