@@ -99,7 +99,7 @@
       export TRIVY_BIN_VERSION
       export TRIVY_REPO_ID
       export TRIVY_REPORTS_LOG_OUTPUT
-      export PROD_REGISTRY
+      export PROD_REGISTRY="registry.deckhouse.io"
       export PROD_REGISTRY_USER
       export PROD_REGISTRY_PASSWORD
       export DEV_REGISTRY
