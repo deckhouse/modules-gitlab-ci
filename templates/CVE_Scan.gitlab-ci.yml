@@ -111,7 +111,7 @@
       export DD_URL
       export DD_TOKEN
       export CODEOWNERS_REPO_TOKEN
-      export DECKHOUSE_PRIVATE_REPO
+      export DECKHOUSE_PRIVATE_REPO="fox.flant.com"
       export CONFIGMAP_PROJECT_ID
       export WORKDIR="${CI_PROJECT_DIR}/${WORKDIR}"
       export TRIVY_DB_URL="${TRIVY_PROD_REGISTRY}/deckhouse/ee/security/trivy-db:2"
