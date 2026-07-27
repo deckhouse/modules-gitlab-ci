@@ -2,7 +2,7 @@
 
 The template runs **Trivy** scans of the module images (and related images) and uploads reports to **DefectDojo**. The `cve_scan.sh` script chooses dev vs release tags and builds registry paths.
 
-Non-standard module paths in prod/dev registries are set with **`MODULE_PROD_REGISTRY_CUSTOM_PATH`** and **`MODULE_DEV_REGISTRY_CUSTOM_PATH`** (template defaults are Deckhouse paths for external modules).
+Non-standard module paths in prod/dev registries are set with **`CS_MODULE_PROD_REGISTRY_CUSTOM_PATH`** and **`CS_MODULE_DEV_REGISTRY_CUSTOM_PATH`** (template defaults are Deckhouse paths for external modules).
 
 ## Typical workflows
 
@@ -50,25 +50,25 @@ Declare in `variables:` with `description` so manual runs can set values from th
 
 | Variable | Purpose |
 |----------|---------|
-| `CVE_RELEASE_TO_SCAN` | Tag/branch for manual runs; often mapped to `SOURCE_TAG` in a `web` rule (legacy name in older docs) |
-| `SCAN_SEVERAL_LATEST_RELEASES` | **`"True"`** / **`"False"`** (must match `cve_scan.sh`; legacy name `CVE_SCAN_SEVERAL_LASTEST_RELEASES`) |
-| `LATEST_RELEASES_AMOUNT` | How many latest releases to scan when several-releases mode is on; default **3** |
-| `TRIVY_REPORTS_LOG_OUTPUT` | `0` — no log, `1` — CVE only, `2` — CVE and licenses (see template) |
-| `MODULE_PROD_REGISTRY_CUSTOM_PATH` | Module path in prod registry (default: `deckhouse/fe/modules`) |
-| `MODULE_DEV_REGISTRY_CUSTOM_PATH` | Module path in dev registry (default: `sys/deckhouse-oss/modules`) |
-| `DIGEST_FROM_WERF` | Werf digest filename (external module scenario) |
+| `CVE_RELEASE_TO_SCAN` | Tag/branch for manual runs; often mapped to `CS_SOURCE_TAG` in a `web` rule |
+| `CS_SCAN_SEVERAL_LATEST_RELEASES` | **`"True"`** / **`"False"`**; legacy name: `CVE_SCAN_SEVERAL_LASTEST_RELEASES` |
+| `CS_LATEST_RELEASES_AMOUNT` | How many latest releases to scan when several-releases mode is on; default **3** |
+| `CS_TRIVY_REPORTS_LOG_OUTPUT` | `0` — no log, `1` — CVE report, `2` — license report (see template) |
+| `CS_MODULE_PROD_REGISTRY_CUSTOM_PATH` | Module path in prod registry (default: `deckhouse/fe/modules`) |
+| `CS_MODULE_DEV_REGISTRY_CUSTOM_PATH` | Module path in dev registry (default: `sys/deckhouse-oss/modules`) |
+| `CS_DIGEST_FROM_WERF` | Werf digest filename (external module scenario) |
 
 ## Module job variables (you must set)
 
 | Variable | Description |
 |----------|-------------|
 | **`VAULT_ROLE`** | Fox role in Seguro for this job/project |
-| **`CASE`** | Script scenario; for Deckhouse external modules use **`"External Modules"`** |
-| **`EXTERNAL_MODULE_NAME`** | Module name in registry paths |
-| **`RELEASE_IN_DEV`** | **`"True"`** / **`"False"`** as in `cve_scan.sh` (case matters) |
-| **`SOURCE_TAG`** | Tag or branch to scan (`main`, `mr123`, branch slug, etc.) — usually via **`rules` → `variables`** |
+| **`CS_CASE`** | Script scenario; for Deckhouse external modules use **`"External Modules"`** |
+| **`CS_EXTERNAL_MODULE_NAME`** | Module name in registry paths |
+| **`CS_RELEASE_IN_DEV`** | **`"True"`** / **`"False"`**; defines whether release images are in the dev registry |
+| **`CS_SOURCE_TAG`** | Tag or branch to scan (`main`, `mr123`, branch slug, etc.) — usually via **`rules` → `variables`** |
 
-Registries and tokens (**`PROD_*`**, **`DEV_*`**, **`DD_*`**, **`TRIVY_PROD_REGISTRY`**, keys for cloning `cve-scan`, …) default from **BOB** via paths in the template; override them in **`cve_scan.variables`** with normal references to project/group CI/CD variables if needed.
+Registries and tokens (**`CS_PROD_*`**, **`CS_DEV_*`**, **`CS_DD_*`**, **`CS_TRIVY_PROD_REGISTRY`**, keys for cloning `cve-scan`, …) default from **BOB** via paths in the template; override them in the job’s **`variables`** with normal references to project/group CI/CD variables if needed.
 
 ## Example job
 
@@ -78,38 +78,38 @@ cve_scan:
   extends:
     - .cve_scan
   variables:
-    CASE: "External Modules"
-    EXTERNAL_MODULE_NAME: my-module
-    RELEASE_IN_DEV: "False"
+    CS_CASE: "External Modules"
+    CS_EXTERNAL_MODULE_NAME: my-module
+    CS_RELEASE_IN_DEV: "False"
     VAULT_ROLE: "your-fox-role-name"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       needs: ["Build"]
       variables:
-        SOURCE_TAG: mr${CI_MERGE_REQUEST_IID}
+        CS_SOURCE_TAG: mr${CI_MERGE_REQUEST_IID}
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       needs: ["Build"]
       variables:
-        SOURCE_TAG: ${CI_DEFAULT_BRANCH}
+        CS_SOURCE_TAG: ${CI_DEFAULT_BRANCH}
     - if: $CI_COMMIT_TAG
       variables:
-        SOURCE_TAG: ${CI_COMMIT_TAG}
+        CS_SOURCE_TAG: ${CI_COMMIT_TAG}
       when: manual
     - if: $CI_PIPELINE_SOURCE == "schedule"
       variables:
-        SCAN_SEVERAL_LATEST_RELEASES: "True"
-        LATEST_RELEASES_AMOUNT: "3"
-        SOURCE_TAG: ${CI_DEFAULT_BRANCH}
+        CS_SCAN_SEVERAL_LATEST_RELEASES: "True"
+        CS_LATEST_RELEASES_AMOUNT: "3"
+        CS_SOURCE_TAG: ${CI_DEFAULT_BRANCH}
     - if: $CI_PIPELINE_SOURCE == "web"
       variables:
-        SOURCE_TAG: ${CVE_RELEASE_TO_SCAN}
+        CS_SOURCE_TAG: ${CVE_RELEASE_TO_SCAN}
 ```
 
 You can move some variables to the global **`variables:`** block if they are shared across jobs.
 
 ## Legacy names (migration from older docs)
 
-Older docs used **`TAG`** and **`MODULE_NAME`**. The current `cve_scan.sh` and template use **`SOURCE_TAG`**, **`EXTERNAL_MODULE_NAME`**, and **`CASE`**. Old examples that only overrode `before_script` and did not use BOB **do not match** the current template.
+Older docs used **`TAG`**, **`MODULE_NAME`**, and variables without the **`CS_`** prefix. The current `cve_scan.sh` and template use **`CS_SOURCE_TAG`**, **`CS_EXTERNAL_MODULE_NAME`**, and **`CS_CASE`**. Old examples that only overrode `before_script` and did not use BOB **do not match** the current template.
 
 ## References
 

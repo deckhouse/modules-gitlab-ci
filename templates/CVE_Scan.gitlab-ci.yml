@@ -1,37 +1,37 @@
 .cve_scan:
   allow_failure: true
   variables:
-    SOURCE_TAG: ""
-    CASE: ""
-    EXTERNAL_MODULE_NAME: ""
     VAULT_ROLE: ""
     VAULT_ADDR: https://seguro.flant.com
-    DD_URL: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DD_URL"
-    DD_TOKEN: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DD_TOKEN"
     CVE_TEST_REPO_GIT: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#CVE_TEST_REPO_GIT"
     CVE_TEST_SSH_PRIVATE_KEY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#CVE_TEST_SSH_PRIVATE_KEY"
-    CODEOWNERS_REPO_TOKEN: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#CODEOWNERS_REPO_TOKEN"
-    DECKHOUSE_PRIVATE_REPO: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DECKHOUSE_PRIVATE_REPO"
-    TRIVY_PROD_REGISTRY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#TRIVY_PROD_REGISTRY"
-    TRIVY_PROD_REGISTRY_USER: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#TRIVY_PROD_REGISTRY_USER"
-    TRIVY_PROD_REGISTRY_PASSWORD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#TRIVY_PROD_REGISTRY_PASSWORD"
-    PROD_REGISTRY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#PROD_READ_REGISTRY"
-    PROD_REGISTRY_USER: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#PROD_READ_REGISTRY_USER"
-    PROD_REGISTRY_PASSWORD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#PROD_READ_REGISTRY_PASSWORD"
-    DEV_REGISTRY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DECKHOUSE_DEV_REGISTRY_HOST"
-    DEV_REGISTRY_USER: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DEV_REGISTRY_USER"
-    DEV_REGISTRY_PASSWORD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DEV_REGISTRY_PASSWORD"
-    SCAN_USERS: "False"
-    SCAN_SEVERAL_LATEST_RELEASES: "False"
-    LATEST_RELEASES_AMOUNT: "3"
-    MODULE_PROD_REGISTRY_CUSTOM_PATH: "deckhouse/fe/modules"
-    MODULE_DEV_REGISTRY_CUSTOM_PATH: "sys/deckhouse-oss/modules"
-    DIGEST_FROM_WERF: "images_tags_werf"
-    TRIVY_REPORTS_LOG_OUTPUT: "1"
-    WORKDIR: "cve-scan"
-    CONFIGMAP_PROJECT_ID: "4352"
-    TRIVY_BIN_VERSION: "v0.67.2"
-    TRIVY_REPO_ID: "2181"
+    CS_SOURCE_TAG: ""
+    CS_CASE: ""
+    CS_EXTERNAL_MODULE_NAME: ""
+    CS_DD_URL: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DD_URL"
+    CS_DD_TOKEN: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DD_TOKEN"
+    CS_CODEOWNERS_REPO_TOKEN: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#CODEOWNERS_REPO_TOKEN"
+    CS_DECKHOUSE_PRIVATE_REPO: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DECKHOUSE_PRIVATE_REPO"
+    CS_TRIVY_PROD_REGISTRY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#TRIVY_PROD_REGISTRY"
+    CS_TRIVY_PROD_REGISTRY_USER: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#TRIVY_PROD_REGISTRY_USER"
+    CS_TRIVY_PROD_REGISTRY_PASSWORD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#TRIVY_PROD_REGISTRY_PASSWORD"
+    CS_PROD_REGISTRY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#PROD_READ_REGISTRY"
+    CS_PROD_REGISTRY_USER: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#PROD_READ_REGISTRY_USER"
+    CS_PROD_REGISTRY_PASSWORD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#PROD_READ_REGISTRY_PASSWORD"
+    CS_DEV_REGISTRY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DECKHOUSE_DEV_REGISTRY_HOST"
+    CS_DEV_REGISTRY_USER: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DEV_REGISTRY_USER"
+    CS_DEV_REGISTRY_PASSWORD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DEV_REGISTRY_PASSWORD"
+    CS_SCAN_USERS: "False"
+    CS_SCAN_SEVERAL_LATEST_RELEASES: "False"
+    CS_LATEST_RELEASES_AMOUNT: "3"
+    CS_MODULE_PROD_REGISTRY_CUSTOM_PATH: "deckhouse/fe/modules"
+    CS_MODULE_DEV_REGISTRY_CUSTOM_PATH: "sys/deckhouse-oss/modules"
+    CS_DIGEST_FROM_WERF: "images_tags_werf"
+    CS_TRIVY_REPORTS_LOG_OUTPUT: "1"
+    CS_WORKDIR: "cve-scan"
+    CS_CONFIGMAP_PROJECT_ID: "4352"
+    CS_TRIVY_BIN_VERSION: "v0.67.2"
+    CS_TRIVY_REPO_ID: "2181"
 
   id_tokens:
     VAULT_ID_TOKEN:
@@ -88,35 +88,35 @@
       echo "Scripts copied to current directory"
   script:
     - |
-      export SOURCE_TAG
-      export CASE
-      export EXTERNAL_MODULE_NAME
-      export RELEASE_IN_DEV
-      export SCAN_USERS
-      export SCAN_SEVERAL_LATEST_RELEASES
-      export LATEST_RELEASES_AMOUNT
-      export TRIVY_PROD_REGISTRY
-      export TRIVY_BIN_VERSION
-      export TRIVY_REPO_ID
-      export TRIVY_REPORTS_LOG_OUTPUT
-      export PROD_REGISTRY
-      export PROD_REGISTRY_USER
-      export PROD_REGISTRY_PASSWORD
-      export DEV_REGISTRY
-      export DEV_REGISTRY_USER
-      export DEV_REGISTRY_PASSWORD
-      export MODULE_PROD_REGISTRY_CUSTOM_PATH
-      export MODULE_DEV_REGISTRY_CUSTOM_PATH
-      export DIGEST_FROM_WERF
-      export DD_URL
-      export DD_TOKEN
-      export CODEOWNERS_REPO_TOKEN
-      export DECKHOUSE_PRIVATE_REPO
-      export CONFIGMAP_PROJECT_ID
-      export WORKDIR="${CI_PROJECT_DIR}/${WORKDIR}"
-      export TRIVY_DB_URL="${TRIVY_PROD_REGISTRY}/deckhouse/ee/security/trivy-db:2"
-      export TRIVY_JAVA_DB_URL="${TRIVY_PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
-      export TRIVY_POLICY_URL="${TRIVY_PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
+      export CS_SOURCE_TAG
+      export CS_CASE
+      export CS_EXTERNAL_MODULE_NAME
+      export CS_RELEASE_IN_DEV
+      export CS_SCAN_USERS
+      export CS_SCAN_SEVERAL_LATEST_RELEASES
+      export CS_LATEST_RELEASES_AMOUNT
+      export CS_TRIVY_PROD_REGISTRY
+      export CS_TRIVY_BIN_VERSION
+      export CS_TRIVY_REPO_ID
+      export CS_TRIVY_REPORTS_LOG_OUTPUT
+      export CS_PROD_REGISTRY
+      export CS_PROD_REGISTRY_USER
+      export CS_PROD_REGISTRY_PASSWORD
+      export CS_DEV_REGISTRY
+      export CS_DEV_REGISTRY_USER
+      export CS_DEV_REGISTRY_PASSWORD
+      export CS_MODULE_PROD_REGISTRY_CUSTOM_PATH
+      export CS_MODULE_DEV_REGISTRY_CUSTOM_PATH
+      export CS_DIGEST_FROM_WERF
+      export CS_DD_URL
+      export CS_DD_TOKEN
+      export CS_CODEOWNERS_REPO_TOKEN
+      export CS_DECKHOUSE_PRIVATE_REPO
+      export CS_CONFIGMAP_PROJECT_ID
+      export CS_WORKDIR="${CI_PROJECT_DIR}/${CS_WORKDIR}"
+      export CS_TRIVY_DB_URL="${CS_TRIVY_PROD_REGISTRY}/deckhouse/ee/security/trivy-db:2"
+      export CS_TRIVY_JAVA_DB_URL="${CS_TRIVY_PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
+      export CS_TRIVY_POLICY_URL="${CS_TRIVY_PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
 
       echo "Running cve_scan.sh"
 
