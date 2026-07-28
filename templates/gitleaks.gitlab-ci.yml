@@ -45,24 +45,41 @@ variables:
         exit 1
       fi
       
-      # ========== Check for optional local config ==========
+      # ========== Compose the scan config ==========
+      # A module's .gitleaks.toml must extend the centralized config, not replace it.
+      # Gitleaks chains configs through [extend] path, so drop the module's own [extend]
+      # section, point a fresh one at the config downloaded above, and keep the rest of the
+      # module config verbatim. Resulting chain:
+      #   gitleaks defaults <- centralized base config <- module config
+      # The module config stays standalone-valid, so `gitleaks detect` still works locally.
+      MERGED_CONFIG="/tmp/gitleaks.merged.toml"
       if [[ -f ".gitleaks.toml" ]]; then
-        # Local config exists - check if it has [extend] section
-        if grep -q "^\[extend\]" .gitleaks.toml; then
-          # Has extend section - use as is
-          CONFIG_ARG="-c .gitleaks.toml"
-          echo "✅ Found local config with [extend] section - using as is"
-        else
-          # No extend section - warn and ignore, use base config only
-          echo "⚠️  WARNING: Local config file .gitleaks.toml exists but does not contain [extend] section"
-          echo "   We cannot be sure this is the expected extend configuration."
-          echo "   Ignoring local config file and using base config only."
-          CONFIG_ARG="-c $TMP_BASE_CONFIG"
+        MODULE_EXTEND_PATH="$(awk '
+          /^[[:space:]]*\[extend\]/ { in_extend = 1; next }
+          /^[[:space:]]*\[/         { in_extend = 0 }
+          in_extend && /^[[:space:]]*path[[:space:]]*=/ { print }
+        ' .gitleaks.toml)"
+        if [[ -n "$MODULE_EXTEND_PATH" ]]; then
+          echo "⚠️  WARNING: .gitleaks.toml declares its own [extend] path:"
+          echo "     $MODULE_EXTEND_PATH"
+          echo "   It is replaced by the centralized config."
         fi
+
+        {
+          printf '[extend]\nuseDefault = false\npath = "%s"\n\n' "$TMP_BASE_CONFIG"
+          awk '
+            /^[[:space:]]*\[extend\]/ { skip = 1; next }
+            /^[[:space:]]*\[/         { skip = 0 }
+            !skip
+          ' .gitleaks.toml
+        } > "$MERGED_CONFIG"
+
+        CONFIG_ARG="-c $MERGED_CONFIG"
+        echo "✅ Composed centralized config + module .gitleaks.toml into $MERGED_CONFIG"
       else
-        # No local config - use centralized config only
+        # No module config - use centralized config only
         CONFIG_ARG="-c $TMP_BASE_CONFIG"
-        echo "🔹 Using centralized config only (no local customization)"
+        echo "🔹 Using centralized config only (no module .gitleaks.toml)"
       fi
       
       # ========== Run scan ==========
@@ -129,7 +146,7 @@ variables:
 
   after_script:
     - echo "🧹 Cleaning up runner workspace..."
-    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz /tmp/gitleaks.base.toml || true
+    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz /tmp/gitleaks.base.toml /tmp/gitleaks.merged.toml || true
 
   artifacts:
     when: always
