@@ -1,0 +1,50 @@
+# Reuse prior Svacer decisions on svace_analyze snapshots. Consuming module sets VAULT_ROLE.
+
+.svacer_autoimport:
+  image: ${SVACER_AUTOREVIEW_IMAGE}
+  tags:
+    - werf-2-stable
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: gitlab-access-aud
+  variables:
+    SVACER_AUTOREVIEW_IMAGE: registry.flant.com/deckhouse/ssdlc-tools/svacer-autoreview:0.2.0
+    GIT_STRATEGY: none
+    VAULT_ADDR: "https://seguro.flant.com"
+    ENV: "PROD"
+    DRY_RUN: "false"
+    PROJECT_GROUP: ${CI_PROJECT_NAME}
+    BRANCH: ${CI_COMMIT_REF_NAME}
+    COMMIT: ${CI_COMMIT_SHA}
+    WORKDIR: ${CI_PROJECT_DIR}/workdir
+    SVACER_URL_PROD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#SVACER_URL"
+    SVACER_TOKEN_PROD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#SVACER_TOKEN_PROD"
+    S3_ENDPOINT: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_ENDPOINT"
+    S3_REGION: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_REGION"
+    S3_BUCKET: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_BUCKET"
+    S3_ACCESS_KEY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_ACCESS_KEY"
+    S3_SECRET_KEY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_SECRET_KEY"
+  before_script:
+    - |
+      export VAULT_TOKEN=$(d8 stronghold write -field=token auth/fox/login role=$VAULT_ROLE jwt=$VAULT_ID_TOKEN 2>/dev/null)
+      if [[ -z "$VAULT_TOKEN" ]]; then echo "VAULT_TOKEN is empty"; exit 1; fi
+      while IFS='=' read -r name value; do
+        if [[ $value == vault:* ]]; then
+          stripped_value=${value#vault:}
+          secret_path="${stripped_value%%#*}"
+          secret_value=$(d8 stronghold read -field=data -format=json "${secret_path}" 2>/dev/null | jq --arg v "${stripped_value#*#}" '.[$v]' -r)
+          export "$name=${secret_value}"
+        fi
+      done < <(env)
+  script:
+    - rm -rf "$WORKDIR"
+    - cd /app
+    - python3 -m src.cache_pull
+    - python3 -m src.autoimport
+  artifacts:
+    when: always
+    paths:
+      - workdir/autoimport
+      - workdir/cache
+    expire_in: 30 days
+  allow_failure: true
