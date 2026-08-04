@@ -43,8 +43,9 @@
       set -euo pipefail
       export PATH="/tmp/venv/bin:$PATH"
       CHANGELOG_PATH="${TRANSLATE_CHANGELOG_PATH}"
-      # Check if last commit changed CHANGELOG/*.ru.yml
-      CHANGED=$(git show --name-only --pretty=format: HEAD | grep "^${CHANGELOG_PATH}/.*\.ru\.yml$" || true)
+      # Check if last commit added or modified CHANGELOG/*.ru.yml (--diff-filter=d skips deletions,
+      # which have nothing to translate — e.g. a revert that drops a release changelog)
+      CHANGED=$(git show --name-only --diff-filter=d --pretty=format: HEAD | grep "^${CHANGELOG_PATH}/.*\.ru\.yml$" || true)
       if [ -z "$CHANGED" ]; then
         echo "No CHANGELOG .ru.yml files changed in last commit, skipping."
         exit 0
@@ -109,8 +110,10 @@
       PYEOF
       ) || TRANSLATE_OUTPUT=""
       fi
-      # Parse VERSION from output; if missing, nothing was translated
-      VERSION=$(echo "$TRANSLATE_OUTPUT" | grep "^VERSION=" | cut -d= -f2)
+      # Parse VERSION from output; if missing, nothing was translated.
+      # `|| true` is required: under `set -o pipefail` a non-matching grep would fail the
+      # assignment and `set -e` would kill the job before the check below could run.
+      VERSION=$(echo "$TRANSLATE_OUTPUT" | grep "^VERSION=" | cut -d= -f2 || true)
       if [ -z "$VERSION" ]; then
         echo "No Russian changelog to translate (or English already exists)."
         exit 0
