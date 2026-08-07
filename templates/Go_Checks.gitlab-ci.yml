@@ -59,15 +59,43 @@
       basedir=$(pwd)
       failed='false'
 
+      # go_module_roots prints the directories that may hold Go modules, skipping
+      # the ones this repository does not have.
+      #
+      # images/ holds the buildable components. lib/go and e2e hold,
+      # respectively, the packages those components share and the end-to-end
+      # suite; both are Go modules in their own right, both are covered by the
+      # repository's .golangci config, and neither was ever linted.
+      go_module_roots() {
+        local root
+        for root in images lib/go e2e; do
+          if [ -d "$basedir/$root" ]; then
+            printf '%s\n' "$root"
+          fi
+        done
+      }
+
       run_linters() {
         local run_for="${1}"
         local extra_args="${2}"
-        for i in $(find images -type f -name go.mod); do
+        local roots
+        roots=$(go_module_roots)
+        if [ -z "$roots" ]; then
+          echo "Nothing to lint: this repository has no images, lib/go or e2e directory"
+          return
+        fi
+        # Directories whose name starts with . or _ are invisible to the go
+        # tool, and a reused runner workspace leaves whole checkouts of other
+        # repositories in some of them (e2e/_storage-e2e is one), so the go.mod
+        # files under them are not ours to lint.
+        for i in $(find $roots \( -name '.*' -o -name '_*' \) -prune -o -type f -name go.mod -print); do
           dir=$(echo $i | sed 's/go.mod$//')
           cd $basedir/$dir
           for edition in $GO_BUILD_TAGS; do
             section_start "run_lint" "Running linter in $dir (edition: $edition) for $run_for"
-            ../../golangci-lint run ${extra_args} --fix --color=always --allow-parallel-runners --build-tags $edition
+            # Absolute path: the modules sit at different depths (images/x/,
+            # lib/go/x/, e2e/), so a relative one cannot reach the binary.
+            "$basedir/golangci-lint" run ${extra_args} --fix --color=always --allow-parallel-runners --build-tags $edition
             local linter_status=$?
             section_end "run_lint"
             if [ $linter_status -ne 0 ]; then
