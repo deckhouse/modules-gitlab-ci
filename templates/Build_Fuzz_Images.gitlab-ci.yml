@@ -135,6 +135,7 @@
       fi
 
       tmp="$(mktemp)"
+
       jq \
         --arg repository "${REPOSITORY}" \
         --arg branch "${BRANCH}" \
@@ -155,6 +156,7 @@
         })
         ' \
         images_fuzz_tags_werf.json > "${tmp}"
+
       mv "${tmp}" images_fuzz_tags_werf.json
 
       jq -e '
@@ -176,4 +178,4 @@
 
       "${MC}" cp \
         "images_fuzz_tags_werf.json" \
-        "fuzz-s3/anomaloys-materials/build-reports/${CI_PROJECT_NAME}/${CI_COMMIT_REF_SLUG}/images_fuzz_tags_werf.json"
+        "fuzz-s3/anomaloys-materials/build-reports/${REPOSITORY}/${BRANCH_SLUG}/images_fuzz_tags_werf.json"
