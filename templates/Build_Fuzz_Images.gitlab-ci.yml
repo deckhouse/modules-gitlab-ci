@@ -74,7 +74,9 @@
 
       # shellcheck disable=SC2086
       werf build ${FUZZ_IMAGES} \
-        --save-build-report --build-report-path images_fuzz_tags_werf.json
+        --parallel=true --parallel-tasks-limit=10 \
+        --save-build-report=true \
+        --build-report-path images_fuzz_tags_werf.json
 
 .build_fuzz_main:
   extends:
@@ -113,7 +115,9 @@
 
       # shellcheck disable=SC2086
       werf build ${FUZZ_IMAGES} \
-        --save-build-report --build-report-path images_fuzz_tags_werf.json
+        --parallel=true --parallel-tasks-limit=10 \
+        --save-build-report=true \
+        --build-report-path images_fuzz_tags_werf.json
 
       command -v jq >/dev/null 2>&1 || {
         echo "jq is required"
@@ -130,22 +134,37 @@
         exit 1
       fi
 
+      tmp="$(mktemp)"
+
       jq \
         --arg repository "${REPOSITORY}" \
         --arg branch "${BRANCH}" \
         --arg branchSlug "${BRANCH_SLUG}" \
         --arg commit "${COMMIT}" \
+        --arg project_id "${CI_PROJECT_ID}" \
+        --arg project_path "${CI_PROJECT_PATH}" \
+        --arg api_v4_url "${CI_API_V4_URL}" \
         '
-        .Source = {
+        .Source = ((.Source // {}) + {
           Repository: $repository,
           Branch: $branch,
           BranchSlug: $branchSlug,
-          Commit: $commit
-        }
+          Commit: $commit,
+          ProjectId: $project_id,
+          ProjectPath: $project_path,
+          ApiV4Url: $api_v4_url
+        })
         ' \
-        images_fuzz_tags_werf.json \
-        > images_fuzz_tags_werf.tmp.json
-      mv images_fuzz_tags_werf.tmp.json images_fuzz_tags_werf.json
+        images_fuzz_tags_werf.json > "${tmp}"
+
+      mv "${tmp}" images_fuzz_tags_werf.json
+
+      jq -e '
+        (.Source.ProjectId // "") != "" and
+        (.Source.ProjectPath // "") != "" and
+        (.Source.ApiV4Url // "") != ""
+      ' images_fuzz_tags_werf.json >/dev/null
+
       cat images_fuzz_tags_werf.json
 
       MC=/tmp/mc
