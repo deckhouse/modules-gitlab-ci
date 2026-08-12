@@ -289,31 +289,69 @@
             fi
           else
             echo "  Checking module tag $module_name"
-            repository=$(echo "$line" | awk '{print $1}' | awk -F'/' '{ print "https://"$1"/"$2"/"$3".git" }')
             pseudo_tag=$(echo "$line" | awk '{print $2}')
             if [[ $pseudo_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "  Exact tag in repo $repository: $pseudo_tag, skipping"
+              echo "  Exact tag for $module_name: $pseudo_tag, skipping"
               continue
+            fi
+
+            # Find the repository root of the dependency. On github.com the project
+            # is the first three path segments, but a self-hosted GitLab can nest it
+            # in groups -- fox.flant.com/deckhouse/storage/<project> is four -- so
+            # try the longest candidate first and keep the one git can actually read.
+            # Assuming three segments made the check clone the GROUP
+            # (https://fox.flant.com/deckhouse/storage.git), and with `set -e` that
+            # failed clone took the whole job down.
+            segments=$(echo "$module_name" | awk -F'/' '{print NF}')
+            repository=""
+            # never block on a credential prompt while probing
+            export GIT_TERMINAL_PROMPT=0
+            for depth in 5 4 3; do
+              [ "$segments" -ge "$depth" ] || continue
+              candidate="https://$(echo "$module_name" | cut -d'/' -f1-$depth).git"
+              if git ls-remote "$candidate" >/dev/null 2>&1; then
+                repository="$candidate"
+                break
+              fi
+            done
+
+            if [ -z "$repository" ]; then
+              echo "  Could not find a readable repository for $module_name, skipping"
+              echo "  (a private repository needs a credential in this job: see the"
+              echo "   GIT_CONFIG_COUNT / netrc setup a module can export before this)"
+              continue
+            fi
+
+            # The module may live in a subdirectory of that repository, and only the
+            # commits touching it move its pseudo-version. When the dependency IS
+            # the repository root, keep the historical `api` pathspec: this check
+            # exists to catch stale pins of our own api modules.
+            module_subdir=$(echo "$module_name" | cut -d'/' -f$((depth + 1))-)
+            if [ -z "$module_subdir" ] || [ "$module_subdir" = "$module_name" ]; then
+              module_subdir="api"
             fi
 
             echo "  Cloning repo $repository into $temp_dir"
             if [ ! -d "$temp_dir/$repository" ]; then
-              git clone "$repository" "$temp_dir/$repository" >/dev/null 2>&1
+              if ! git clone "$repository" "$temp_dir/$repository" >/dev/null 2>&1; then
+                echo "  Could not clone $repository, skipping"
+                continue
+              fi
             fi
 
             cd "$temp_dir/$repository" || continue
 
-            commit_info=$(git log -1 --pretty=format:"%H %cd" --date=iso-strict -- api/*)
+            commit_info=$(git log -1 --pretty=format:"%H %cd" --date=iso-strict -- "$module_subdir")
             short_hash=$(echo "$commit_info" | awk '{print substr($1,1,12)}')
             commit_date=$(echo "$commit_info" | awk '{print $2}')
             commit_date=$(date -u -d "$commit_date" +"%Y%m%d%H%M%S")
             actual_pseudo_tag="v0.0.0-"$commit_date"-"$short_hash
             pseudo_tag_date=$(echo $pseudo_tag | awk -F'-' '{ print $2 }')
-            echo "  Latest commit in $repository: $short_hash $commit_date"
+            echo "  Latest commit in $repository ($module_subdir): $short_hash $commit_date"
 
             if [[ "$pseudo_tag" != "$actual_pseudo_tag" ]]; then
-              echo "  Incorrect pseudo tag for repo $repository in file $go_mod_file (current: $pseudo_tag, actual: $actual_pseudo_tag)"
-              echo "  Incorrect pseudo tag for repo $repository in file $go_mod_file (current: $pseudo_tag, actual: $actual_pseudo_tag)" >> "$temp_dir/incorrect_alert"
+              echo "  Incorrect pseudo tag for $module_name in $dir/go.mod (current: $pseudo_tag, actual: $actual_pseudo_tag)"
+              echo "  Incorrect pseudo tag for $module_name in $dir/go.mod (current: $pseudo_tag, actual: $actual_pseudo_tag)" >> "$temp_dir/incorrect_alert"
             fi
 
             cd - >/dev/null 2>&1
