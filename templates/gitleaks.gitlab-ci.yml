@@ -1,5 +1,8 @@
 variables:
   GITLEAKS_VERSION: "v8.28.0"
+  # Kept on refs/heads/main deliberately: the version branches of this repo (v15.0,
+  # v16.0, ...) do not all exist on GitHub, so a versioned raw.githubusercontent ref
+  # would 404. Override per module only if you also host the config elsewhere.
   GITLEAKS_BASE_CONFIG_URL: "https://raw.githubusercontent.com/deckhouse/modules-gitlab-ci/refs/heads/main/gitleaks/config/gitleaks.base.toml"
 
 .gitleaks_scan:
@@ -10,6 +13,22 @@ variables:
   script:
     - |
       set -euo pipefail
+      
+      # ========== Download helper ==========
+      # Both downloads below leave the runner network, and GitHub egress from the shared
+      # runners is intermittent. A single connect timeout used to burn 135s and fail the
+      # whole scan before it started, so bound each attempt and retry instead:
+      #   --connect-timeout keeps a blackholed connection from eating the job timeout
+      #   --retry           already covers curl exit 28 (timeout) and HTTP 5xx
+      #   --retry-connrefused adds the ECONNREFUSED case, which --retry alone skips
+      # Deliberately not --retry-all-errors: a genuine 404 must fail fast, not retry 5x.
+      # Worst case here is ~115s (6 attempts x 15s connect + 5 x 5s delay).
+      fetch() {
+        curl --fail --silent --show-error --location \
+          --connect-timeout 15 --max-time 300 \
+          --retry 5 --retry-delay 5 --retry-connrefused \
+          "$@"
+      }
       
       # ========== Install Gitleaks ==========
       echo "📥 Installing Gitleaks $GITLEAKS_VERSION..."
@@ -23,7 +42,9 @@ variables:
       
       base="https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}"
       tgz="gitleaks_${file_ver}_${pkg_arch}.tar.gz"
-      curl -sSL "$base/$tgz" -o gitleaks.tgz
+      # --fail matters here: without it an HTML error page lands in gitleaks.tgz and the
+      # failure surfaces as a confusing tar error instead of the actual HTTP status.
+      fetch "$base/$tgz" -o gitleaks.tgz
       tar -xzf gitleaks.tgz gitleaks
       chmod +x gitleaks
       mkdir -p "$HOME/.local/bin"
@@ -37,7 +58,7 @@ variables:
       CONFIG_URL="${GITLEAKS_BASE_CONFIG_URL}"
       
       echo "📥 Downloading centralized config..."
-      if curl -sSLf "$CONFIG_URL" -o "$TMP_BASE_CONFIG"; then
+      if fetch "$CONFIG_URL" -o "$TMP_BASE_CONFIG"; then
         echo "✅ Centralized config downloaded to $TMP_BASE_CONFIG"
       else
         echo "❌ Failed to download centralized config from $CONFIG_URL"
@@ -45,24 +66,41 @@ variables:
         exit 1
       fi
       
-      # ========== Check for optional local config ==========
+      # ========== Compose the scan config ==========
+      # A module's .gitleaks.toml must extend the centralized config, not replace it.
+      # Gitleaks chains configs through [extend] path, so drop the module's own [extend]
+      # section, point a fresh one at the config downloaded above, and keep the rest of the
+      # module config verbatim. Resulting chain:
+      #   gitleaks defaults <- centralized base config <- module config
+      # The module config stays standalone-valid, so `gitleaks detect` still works locally.
+      MERGED_CONFIG="/tmp/gitleaks.merged.toml"
       if [[ -f ".gitleaks.toml" ]]; then
-        # Local config exists - check if it has [extend] section
-        if grep -q "^\[extend\]" .gitleaks.toml; then
-          # Has extend section - use as is
-          CONFIG_ARG="-c .gitleaks.toml"
-          echo "✅ Found local config with [extend] section - using as is"
-        else
-          # No extend section - warn and ignore, use base config only
-          echo "⚠️  WARNING: Local config file .gitleaks.toml exists but does not contain [extend] section"
-          echo "   We cannot be sure this is the expected extend configuration."
-          echo "   Ignoring local config file and using base config only."
-          CONFIG_ARG="-c $TMP_BASE_CONFIG"
+        MODULE_EXTEND_PATH="$(awk '
+          /^[[:space:]]*\[extend\]/ { in_extend = 1; next }
+          /^[[:space:]]*\[/         { in_extend = 0 }
+          in_extend && /^[[:space:]]*path[[:space:]]*=/ { print }
+        ' .gitleaks.toml)"
+        if [[ -n "$MODULE_EXTEND_PATH" ]]; then
+          echo "⚠️  WARNING: .gitleaks.toml declares its own [extend] path:"
+          echo "     $MODULE_EXTEND_PATH"
+          echo "   It is replaced by the centralized config."
         fi
+
+        {
+          printf '[extend]\nuseDefault = false\npath = "%s"\n\n' "$TMP_BASE_CONFIG"
+          awk '
+            /^[[:space:]]*\[extend\]/ { skip = 1; next }
+            /^[[:space:]]*\[/         { skip = 0 }
+            !skip
+          ' .gitleaks.toml
+        } > "$MERGED_CONFIG"
+
+        CONFIG_ARG="-c $MERGED_CONFIG"
+        echo "✅ Composed centralized config + module .gitleaks.toml into $MERGED_CONFIG"
       else
-        # No local config - use centralized config only
+        # No module config - use centralized config only
         CONFIG_ARG="-c $TMP_BASE_CONFIG"
-        echo "🔹 Using centralized config only (no local customization)"
+        echo "🔹 Using centralized config only (no module .gitleaks.toml)"
       fi
       
       # ========== Run scan ==========
@@ -129,7 +167,7 @@ variables:
 
   after_script:
     - echo "🧹 Cleaning up runner workspace..."
-    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz /tmp/gitleaks.base.toml || true
+    - rm -f "$HOME/.local/bin/gitleaks" gitleaks.tgz /tmp/gitleaks.base.toml /tmp/gitleaks.merged.toml || true
 
   artifacts:
     when: always
