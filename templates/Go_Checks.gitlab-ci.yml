@@ -178,7 +178,19 @@
         done
       }
 
+      # GO_TESTS_EXCLUDE_REGEX (optional, ERE) skips test files whose path
+      # matches it. Needed by modules that carry Go sources for a *patched
+      # upstream* tree: those files belong to the upstream module and only
+      # compile after the patches are applied during the image build, so there
+      # is no go.mod to find here and `go test` in place always fails. Such
+      # modules run those tests in the build stage instead, where the tree is
+      # assembled. Without the skip a single such file turns this job red for
+      # every edition in GO_BUILD_TAGS and hides the tests that do run.
       for i in $(find images -type f -name '*_test.go'); do
+        if [ -n "${GO_TESTS_EXCLUDE_REGEX:-}" ] && echo "$i" | grep -qE "$GO_TESTS_EXCLUDE_REGEX"; then
+          echo "Skipping $i (GO_TESTS_EXCLUDE_REGEX=$GO_TESTS_EXCLUDE_REGEX)"
+          continue
+        fi
         dir=$(echo $i | sed 's/[a-z_A-Z0-9-]*_test.go$//')
         cd $basedir/$dir
 
