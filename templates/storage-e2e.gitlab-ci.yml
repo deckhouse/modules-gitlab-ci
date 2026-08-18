@@ -46,7 +46,7 @@
 #   E2E_TEST_PACKAGE       Go package to test                  (default: ./tests/)
 #   E2E_CLUSTER_CONFIG     cluster YAML (relative to repo)     (default: e2e/tests/cluster_config.ci.yml)
 #   E2E_CLUSTER_PROVIDER   provider: commander | dvp           (default: commander)
-#   E2E_STORAGE_E2E_REPO   storage-e2e git URL                 (default: https://github.com/deckhouse/storage-e2e.git)
+#   E2E_STORAGE_E2E_REPO   storage-e2e git URL                 (default: https://fox.flant.com/deckhouse/storage/storage-e2e.git)
 #   E2E_STORAGE_E2E_REF    storage-e2e git ref                 (default: main)
 #   E2E_MODULE_IMAGE_TAG   module image tag under test         (default: mr${CI_MERGE_REQUEST_IID})
 #   E2E_DEFAULT_LABEL_FILTER default Ginkgo filter             (default: !stress-test)
@@ -87,7 +87,7 @@ variables:
   E2E_TEST_PACKAGE: "./tests/"
   E2E_CLUSTER_CONFIG: "e2e/tests/cluster_config.ci.yml"
   E2E_CLUSTER_PROVIDER: "commander"
-  E2E_STORAGE_E2E_REPO: "https://github.com/deckhouse/storage-e2e.git"
+  E2E_STORAGE_E2E_REPO: "https://fox.flant.com/deckhouse/storage/storage-e2e.git"
   E2E_STORAGE_E2E_REF: "main"
   E2E_MODULE_IMAGE_TAG: "mr${CI_MERGE_REQUEST_IID}"
   E2E_DEFAULT_LABEL_FILTER: "!stress-test"
@@ -154,6 +154,36 @@ variables:
       fi
       export GOTOOLCHAIN=auto
       go version
+
+      # Credential for fox.flant.com. Both storage-e2e itself and the module APIs
+      # the suites import (sds-node-configurator/api and friends) live in private
+      # fox projects now, so the clone below and every `go` command need one.
+      #
+      # CI_JOB_TOKEN is accepted for git operations but NOT by the ?go-get=1
+      # endpoint: that answers 404 for a private project, and Go treats an explicit
+      # 404 as "no such module" instead of probing the repository with git. The
+      # group-level FOX_GO_TOKEN answers it; the job token stays as the fallback.
+      #
+      # GOAUTH is pinned to netrc on purpose: the shell runners carry a persistent
+      # `go env -w GOAUTH=<another project's helper script>` in
+      # /opt/gitlab-runner/.config/go/env, which makes the go command ignore netrc
+      # entirely. The environment wins over the persistent file.
+      #
+      # Everything goes into the environment, never into ~/.netrc or ~/.gitconfig:
+      # this runner is shared, and a global config would leave the token behind for
+      # every later job.
+      if [ -n "${FOX_GO_TOKEN:-}" ] || [ -n "${CI_JOB_TOKEN:-}" ]; then
+        __fox_token="${FOX_GO_TOKEN:-${CI_JOB_TOKEN}}"
+        __netrc="$(umask 077 && mktemp)"
+        printf 'machine fox.flant.com login oauth2 password %s\n' "${__fox_token}" > "${__netrc}"
+        export NETRC="${__netrc}"
+        export GIT_TERMINAL_PROMPT=0
+        export GOPRIVATE=fox.flant.com
+        export GOAUTH=netrc
+        export GIT_CONFIG_COUNT=1
+        export GIT_CONFIG_KEY_0="url.https://oauth2:${__fox_token}@fox.flant.com/.insteadOf"
+        export GIT_CONFIG_VALUE_0="https://fox.flant.com/"
+      fi
 
       # GitLab masked variables cannot contain whitespace/newlines, so multi-line
       # secrets (SSH private keys, CA cert) are provided base64-encoded on a
