@@ -255,12 +255,18 @@
         printf 'go%s\n' "$v"
       }
 
-      if [ ! -d "images" ]; then
-        echo "No images/ directory found. Please run this script from the root of the repository."
-        exit 1
+      # A Deckhouse module keeps its Go modules under images/. A plain Go project --
+      # a library, the e2e framework, a service consumed as a module -- has no
+      # images/ directory at all, and used to fail here before running a single
+      # test; fall back to every go.mod in the repository for those.
+      if [ -d "images" ]; then
+        gomod_root="images/"
+      else
+        gomod_root="."
+        echo "No images/ directory; covering every go.mod in the repository instead."
       fi
 
-      find images/ -type f -name "go.mod" | while read -r gomod; do
+      find "$gomod_root" -type f -name "go.mod" -not -path "*/vendor/*" | while read -r gomod; do
         dir=$(dirname "$gomod")
 
         echo "Test coverage in $dir"
