@@ -395,6 +395,22 @@
             cd "$temp_dir/$repository" || continue
 
             commit_info=$(git log -1 --pretty=format:"%H %cd" --date=iso-strict -- "$module_subdir")
+
+            # Nothing in the repository matches the pathspec. For a dependency that
+            # is the repository root that means it has no api/ directory, i.e. it is
+            # not one of our api modules and this check has no opinion on its pin.
+            # Without this guard the empty commit_info produced an empty hash and
+            # `date -u -d ""` filled in today at 00:00:00, so the comparison always
+            # failed and reported a bogus "actual: v0.0.0-<today>000000-" for
+            # third-party dependencies such as deckhouse/lib-gossh and
+            # deckhouse/rootca, which arrive through the module graph rather than
+            # from a go.mod of ours.
+            if [ -z "$commit_info" ]; then
+              echo "  No commit touches $module_subdir in $repository, skipping"
+              cd - >/dev/null 2>&1
+              continue
+            fi
+
             short_hash=$(echo "$commit_info" | awk '{print substr($1,1,12)}')
             commit_date=$(echo "$commit_info" | awk '{print $2}')
             commit_date=$(date -u -d "$commit_date" +"%Y%m%d%H%M%S")
