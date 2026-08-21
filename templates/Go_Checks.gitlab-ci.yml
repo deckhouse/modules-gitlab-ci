@@ -438,3 +438,40 @@
         echo "We have non-actual pseudo-tags or modules names in repository's go.mod files"
         exit 1
       fi
+
+# ---------------------------------------------------------------------------
+# Generated CRDs check
+# ---------------------------------------------------------------------------
+# crds/ is generated from the module's Go API types: controller-gen renders the
+# OpenAPI schema from the kubebuilder markers and crd-enricher folds in what
+# controller-gen cannot emit (the x-doc-* documentation fields, description
+# overrides for vendored subtrees such as metav1.Condition, and the CRD-level
+# normalisations the documentation renderer expects). Nothing else keeps the
+# manifests and the Go types in step, so a hand edit that slips through the
+# review reintroduces exactly the drift the generation was added to remove.
+#
+# A module opts in by shipping `hack/generate_crds.sh`. Where that script does
+# not exist the job says so and passes, so this template is safe to include in
+# every project regardless of whether its CRDs are generated yet.
+#
+# Unlike the jobs above this one carries no `allow_failure`: a stale crds/ ships
+# an API the controller does not implement, which is a wrong artifact rather
+# than a warning. A consuming project can still relax it on its own job.
+.crds_generated_check:
+  stage: go_checks
+  script:
+    - |
+      if [ ! -f hack/generate_crds.sh ]; then
+        echo "No hack/generate_crds.sh in this repository: crds/ is not generated here, nothing to check."
+        exit 0
+      fi
+
+      bash hack/generate_crds.sh
+
+      if [ -n "$(git status --porcelain -- crds/)" ]; then
+        echo -e "\e[31mcrds/ is out of date with the API types\e[0m"
+        echo "Run hack/generate_crds.sh and commit the result."
+        git --no-pager diff -- crds/
+        exit 1
+      fi
+      echo -e "\e[32mcrds/ matches the API types\e[0m"
