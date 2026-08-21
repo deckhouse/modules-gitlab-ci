@@ -1,7 +1,14 @@
 # Translate Changelog and Create MR — GitLab analogue of modules-actions translate-changelog.
 #
-# When CHANGELOG/*.ru.yml is changed in the last commit: finds latest Russian changelog,
-# translates to English (.yml), commits, pushes, creates MR to base branch.
+# When CHANGELOG/*.ru.yml is changed in the last commit: translates those files to English
+# (.yml), commits, pushes, creates MR to base branch.
+#
+# Translation is verified, not trusted: deep_translator returns the source string on some
+# backend failures instead of raising, so every line is retried up to 3 times and a result
+# that still holds Cyrillic counts as a failure. If any line is still untranslated after the
+# retries the job fails and commits nothing -- better a red job than a release changelog that
+# says "Changes:" and then lists them in Russian. An existing .yml is left alone when it holds
+# no Cyrillic (a good or hand-written translation) and regenerated when it does.
 #
 # variables (optional):
 #   TRANSLATE_CHANGELOG_PATH - path to CHANGELOG directory (default: CHANGELOG)
@@ -53,10 +60,10 @@
       echo "CHANGELOG .ru.yml files changed in last commit: $CHANGED"
       # Run translation (use project script if present, else inline Python)
       if [ -f "${CI_PROJECT_DIR}/scripts/translate_changelog.py" ]; then
-        TRANSLATE_OUTPUT=$(cd "${CI_PROJECT_DIR}" && python3 scripts/translate_changelog.py "$CHANGELOG_PATH" 2>&1) || TRANSLATE_OUTPUT=""
+        TRANSLATE_OUTPUT=$(cd "${CI_PROJECT_DIR}" && printf '%s\n' "$CHANGED" | python3 scripts/translate_changelog.py "$CHANGELOG_PATH") || TRANSLATE_FAILED=1
       else
-        TRANSLATE_OUTPUT=$(cd "${CI_PROJECT_DIR}" && python3 - "$CHANGELOG_PATH" << 'PYEOF'
-      import os, re, sys
+        TRANSLATE_OUTPUT=$(cd "${CI_PROJECT_DIR}" && printf '%s\n' "$CHANGED" | python3 - "$CHANGELOG_PATH" << 'PYEOF'
+      import re, sys, time
       from pathlib import Path
       try:
           from packaging import version as pkg_version
@@ -64,58 +71,104 @@
       except ImportError as e:
           print(f"Import error: {e}", file=sys.stderr)
           sys.exit(1)
+      CYRILLIC = re.compile(r"[\u0400-\u04FF]")
+      ATTEMPTS = 3
       changelog_dir = sys.argv[1]
+      # The changed .ru.yml files, one per line on stdin. Falls back to every
+      # v*.ru.yml in the directory when nothing is piped in.
+      changed = [l.strip() for l in sys.stdin.read().splitlines() if l.strip()]
       path = Path(changelog_dir)
       if not path.exists():
           sys.exit(0)
-      ru_files = list(path.glob("v*.ru.yml"))
-      if not ru_files:
-          sys.exit(0)
+      ru_files = [Path(c) for c in changed] if changed else list(path.glob("v*.ru.yml"))
       versions = []
       for f in ru_files:
           m = re.match(r"v(\d+\.\d+\.\d+)\.ru\.yml", f.name)
-          if m:
+          if m and f.exists():
               try:
-                  ver = pkg_version.parse(m.group(1))
-                  versions.append((ver, f.name))
+                  versions.append((pkg_version.parse(m.group(1)), f))
               except pkg_version.InvalidVersion:
                   pass
       if not versions:
+          print("No versioned .ru.yml file to translate.", file=sys.stderr)
           sys.exit(0)
       versions.sort(reverse=True, key=lambda x: x[0])
-      latest_ver, ru_name = versions[0]
-      version_str = f"v{latest_ver}"
-      eng_name = ru_name.replace(".ru.yml", ".yml")
-      if (path / eng_name).exists():
-          sys.exit(0)
-      ru_path, eng_path = path / ru_name, path / eng_name
-      translator = GoogleTranslator(source="ru", target="en")
-      with open(ru_path, "r", encoding="utf-8") as f:
-          ru_lines = f.readlines()
-      with open(eng_path, "w", encoding="utf-8") as f:
-          for line in ru_lines:
-              if not line.strip():
-                  f.write(line)
-                  continue
-              indent_len = len(line) - len(line.lstrip())
-              content = line.strip()
+
+      def translate_line(translator, text):
+          """Translate one line, retrying transient failures.
+
+          deep_translator returns the source string on some failures instead of
+          raising, so a result that still holds Cyrillic counts as a failure too.
+          """
+          last_err = None
+          for attempt in range(1, ATTEMPTS + 1):
               try:
-                  translated = translator.translate(content)
-              except Exception:
-                  translated = content
-              f.write(" " * indent_len + translated + "\n")
-      print(f"VERSION={version_str}")
-      print(f"RU_FILE={ru_name}")
-      print(f"ENG_FILE={eng_name}")
+                  out = translator.translate(text)
+              except Exception as e:  # noqa: BLE001 - any backend error is retryable
+                  out, last_err = None, e
+              if out and not CYRILLIC.search(out):
+                  return out, None
+              if attempt < ATTEMPTS:
+                  time.sleep(2 * attempt)
+          return None, last_err
+
+      translator = GoogleTranslator(source="ru", target="en")
+      untranslated = []
+      written = []
+      for ver, ru_path in versions:
+          eng_path = ru_path.with_name(ru_path.name.replace(".ru.yml", ".yml"))
+          if eng_path.exists():
+              existing = eng_path.read_text(encoding="utf-8")
+              if not CYRILLIC.search(existing):
+                  print(f"{eng_path.name} already exists and holds no Cyrillic, leaving it as is.",
+                        file=sys.stderr)
+                  continue
+              print(f"{eng_path.name} exists but still holds Cyrillic, regenerating it.",
+                    file=sys.stderr)
+          out_lines = []
+          for line in ru_path.read_text(encoding="utf-8").splitlines(keepends=True):
+              if not line.strip():
+                  out_lines.append(line)
+                  continue
+              indent = " " * (len(line) - len(line.lstrip()))
+              content = line.strip()
+              if not CYRILLIC.search(content):
+                  out_lines.append(indent + content + "\n")
+                  continue
+              translated, err = translate_line(translator, content)
+              if translated is None:
+                  untranslated.append((ru_path.name, content, err))
+                  out_lines.append(indent + content + "\n")
+              else:
+                  out_lines.append(indent + translated + "\n")
+          eng_path.write_text("".join(out_lines), encoding="utf-8")
+          written.append((ver, ru_path, eng_path))
+      if untranslated:
+          print(f"Translation failed for {len(untranslated)} line(s); refusing to commit a "
+                f"half-Russian changelog:", file=sys.stderr)
+          for name, content, err in untranslated:
+              print(f"  {name}: {content}" + (f" ({err})" if err else ""), file=sys.stderr)
+          sys.exit(1)
+      if not written:
+          sys.exit(0)
+      top_ver, top_ru, top_eng = written[0]
+      print(f"VERSION=v{top_ver}")
+      print(f"RU_FILE={top_ru.name}")
+      print(f"ENG_FILE={top_eng.name}")
       PYEOF
-      ) || TRANSLATE_OUTPUT=""
+      ) || TRANSLATE_FAILED=1
+      fi
+      if [ -n "${TRANSLATE_FAILED:-}" ]; then
+        echo "Translation failed, see the errors above. Not committing anything." >&2
+        exit 1
       fi
       # Parse VERSION from output; if missing, nothing was translated.
       # `|| true` is required: under `set -o pipefail` a non-matching grep would fail the
       # assignment and `set -e` would kill the job before the check below could run.
       VERSION=$(echo "$TRANSLATE_OUTPUT" | grep "^VERSION=" | cut -d= -f2 || true)
       if [ -z "$VERSION" ]; then
-        echo "No Russian changelog to translate (or English already exists)."
+        echo "Nothing was translated (see the reasons above; an English file that holds no"
+        echo "Cyrillic is left untouched on purpose)."
         exit 0
       fi
       RU_FILE=$(echo "$TRANSLATE_OUTPUT" | grep "^RU_FILE=" | cut -d= -f2)
@@ -137,7 +190,17 @@
       git checkout -B "$BRANCH"
       REPO_URL="https://oauth2:${RELEASE_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
       git remote set-url origin "$REPO_URL"
-      git push origin "$BRANCH"
+      # Land on top of whatever the branch holds now. Without this a re-run of the job
+      # (the branch already carries the translate commit it made the first time, or a
+      # human pushed after it) dies with "! [rejected] ... (non-fast-forward)". After the
+      # rebase an identical commit becomes empty and is dropped, so the push is a no-op.
+      git fetch origin "$BRANCH"
+      if ! git rebase FETCH_HEAD; then
+        git rebase --abort || true
+        echo "Cannot rebase the translation onto origin/${BRANCH}, resolve it by hand." >&2
+        exit 1
+      fi
+      git push origin "HEAD:${BRANCH}"
       # Create MR if not exists
       EXISTING_MR=$(curl -s --header "PRIVATE-TOKEN: ${RELEASE_TOKEN:-$CI_JOB_TOKEN}" \
         "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests?source_branch=${CI_COMMIT_REF_NAME}&target_branch=${TRANSLATE_BASE_BRANCH}&state=opened" \
