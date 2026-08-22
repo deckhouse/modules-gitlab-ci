@@ -1,20 +1,591 @@
-# Translate Changelog and Create MR — GitLab analogue of modules-actions translate-changelog.
+# Changelog: validation gate and Russian -> English translation.
 #
-# When CHANGELOG/*.ru.yml is changed in the last commit: translates those files to English
-# (.yml), commits, pushes, creates MR to base branch.
+# Two hidden jobs:
 #
-# Translation is verified, not trusted: deep_translator returns the source string on some
-# backend failures instead of raising, so every line is retried up to 3 times and a result
-# that still holds Cyrillic counts as a failure. If any line is still untranslated after the
-# retries the job fails and commits nothing -- better a red job than a release changelog that
-# says "Changes:" and then lists them in Russian. An existing .yml is left alone when it holds
-# no Cyrillic (a good or hand-written translation) and regenerated when it does.
+#   .changelog_validate       parses CHANGELOG/*.yml as YAML and checks their structure.
+#                             Runs on merge requests, on the default branch and on tags.
+#   .translate_and_create_mr  translates the changed CHANGELOG/*.ru.yml to English (.yml),
+#                             validates the result, commits, pushes and opens an MR.
 #
-# variables (optional):
-#   TRANSLATE_CHANGELOG_PATH - path to CHANGELOG directory (default: CHANGELOG)
-#   TRANSLATE_BASE_BRANCH   - target branch for MR (default: main)
-#   RELEASE_TOKEN or CI_JOB_TOKEN - used to push and create MR (CI_JOB_TOKEN works in GitLab 15.9+)
+# WHY THE VALIDATION GATE EXISTS
+#
+# snapshot-controller v0.2.0 never reached any cluster: the changelog.yaml baked into the
+# release image did not parse as YAML, and nothing caught it -- not review, not CI. The
+# failure surfaced only as "the module does not update". The cause is a colon followed by a
+# space inside a plain (unquoted) scalar in a list item: when a long sentence wraps so that
+# the continuation line starts before the `: `, YAML reads the continuation as a mapping key
+# and the document breaks. It happened in the Russian and the English file at once, so it
+# survived generation, review and the build.
+#
+# The same root cause has a quieter form that is already all over the repositories: a list
+# item that parses as a single-key mapping instead of a string, which is what the house style
+# `- Исправление: текст` produces (229 such items across the storage modules at the time of
+# writing, 4 of the 6 items in the newest csi-nfs changelog among them). Those are reported as
+# WARNINGS, never errors -- the release-notes generator renders them as "key: value", so
+# failing on them would block every release written in the current style. They are worth the
+# warning for two reasons: a line wrap landing in front of the colon turns exactly this into
+# the hard parse error above, and Console's recursive changelog view renders such an item as a
+# nested dictionary, i.e. a heading per bullet instead of a list.
+#
+# Everything that cannot be explained by that style stays an error: a file that does not
+# parse, a missing or renamed section key, a section that is not a non-empty list, an item
+# that is neither a string nor a single-key mapping, Cyrillic in the English file, and a
+# ru/en pair whose item counts diverge.
+#
+# TRANSLATION
+#
+# Translation goes through the company OpenWebUI instance (OpenAI-compatible chat endpoint).
+# The whole YAML document is translated in one request instead of line by line, because the
+# line-by-line translator mangled markdown links, metric names and CVE identifiers, and
+# because the ADR asks for an English text of the same quality as the Russian one, not for a
+# word-by-word substitution. The model is explicitly told to double-quote a translation that
+# contains `: ` -- that is the one instruction that keeps the bug above from being
+# reintroduced by the translation itself.
+#
+# The result is never trusted: it has to parse as YAML, carry the `Changes` key, hold exactly
+# as many list items as the source, contain no Cyrillic and no non-string item. A result that
+# fails any of those is fed back to the model with the complaint, up to
+# CHANGELOG_TRANSLATE_ATTEMPTS times. If it still fails, the job fails and commits nothing --
+# better a red job than a release changelog that says "Changes:" and then lists them in
+# Russian.
+#
+# REQUIRED CI/CD VARIABLE
+#
+#   OPENWEBUI_API_KEY   OpenWebUI API key. Masked, and NOT protected: the translation job
+#                       runs on the changelog branch, which is not a protected branch, and a
+#                       protected variable would simply be absent there.
+#
+# OPTIONAL VARIABLES
+#
+#   OPENWEBUI_URL                    default https://4o.flant.ru
+#                                    Use the .ru host: 4o.flant.com answers 302 to it, and
+#                                    curl/urllib drop the Authorization header on a
+#                                    cross-host redirect, so the .com host authenticates as
+#                                    anonymous and gets a 401.
+#   OPENWEBUI_MODEL                  default deepseek-v3.2
+#   CHANGELOG_TRANSLATE_ATTEMPTS     default 3
+#   TRANSLATE_CHANGELOG_PATH         path to the CHANGELOG directory, default CHANGELOG
+#   TRANSLATE_BASE_BRANCH            target branch of the MR, default main
+#   CHANGELOG_VALIDATE_SCOPE         changed (default) | all -- validate only the files the
+#                                    current change touches, or every file in the directory
+#   CHANGELOG_REQUIRE_ON_TAG         default true -- on a tag pipeline, CHANGELOG/<tag>.yml
+#                                    and <tag>.ru.yml must exist and be valid
+#   RELEASE_TOKEN                    token with api + write_repository for push and MR;
+#                                    CI_JOB_TOKEN is used when unset
+#
+# The former `scripts/translate_changelog.py` project override is gone: no module ever had
+# that file, and its line-by-line contract does not survive whole-document translation.
+#
+# Usage in a project:
+#
+#   Validate changelog:
+#     extends: .changelog_validate
+#
+#   Translate changelog and create MR:
+#     extends: .translate_and_create_mr
 
+# ---------------------------------------------------------------------------
+# Shared: the tool itself, written to disk by both jobs.
+# ---------------------------------------------------------------------------
+.changelog_tool_script: &changelog_tool_script
+  - |
+    mkdir -p "${CI_PROJECT_DIR}/.changelog-tool"
+    cat > "${CI_PROJECT_DIR}/.changelog-tool/changelog_tool.py" << 'CHANGELOG_TOOL_PYEOF'
+    #!/usr/bin/env python3
+    # Copyright 2026 Flant JSC
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     http://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    """Validate and translate module release changelogs.
+
+        changelog_tool.py validate [--require-exists] [--all] [FILE ...]
+        changelog_tool.py translate [FILE ...]
+
+    validate treats the listed files as strict (any problem is an error) and the rest of the
+    changelog directory as advisory (problems are warnings). --all makes every file strict.
+
+    translate reads the listed .ru.yml files and writes the .yml counterparts, then prints
+    VERSION=/RU_FILE=/ENG_FILE= for the highest version it wrote, which the calling job parses.
+    Diagnostics go to stderr, the machine-readable lines to stdout.
+    """
+
+    import json
+    import os
+    import re
+    import sys
+    import time
+    import urllib.error
+    import urllib.request
+    from pathlib import Path
+
+    try:
+        import yaml
+    except ImportError:  # pragma: no cover - the job installs it
+        print("PyYAML is required", file=sys.stderr)
+        raise SystemExit(1)
+
+    CYRILLIC = re.compile(r"[Ѐ-ӿ]")
+    VERSION_FILE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(\.ru)?\.yml$")
+    SECTION_KEY = {"ru": "Изменения", "en": "Changes"}
+
+    CHANGELOG_DIR = Path(os.environ.get("TRANSLATE_CHANGELOG_PATH", "CHANGELOG"))
+
+    OPENWEBUI_URL = os.environ.get("OPENWEBUI_URL", "https://4o.flant.ru").rstrip("/")
+    OPENWEBUI_MODEL = os.environ.get("OPENWEBUI_MODEL", "deepseek-v3.2")
+    ATTEMPTS = int(os.environ.get("CHANGELOG_TRANSLATE_ATTEMPTS", "3"))
+
+    SYSTEM_PROMPT = """You translate release notes for a Kubernetes storage product from Russian to English.
+
+    The input is a YAML document. Output ONLY the translated YAML: no code fences, no commentary,
+    no leading or trailing prose.
+
+    Rules:
+    - Keep the structure identical: same nesting, same number of list items, same order.
+    - Translate the top-level key `Изменения` to `Changes`. Leave any ASCII key untouched.
+    - Translate prose only. Never translate or alter URLs, file paths, YAML keys, Go and
+      Kubernetes identifiers, resource kinds and field names, image and container names, metric
+      and alert names, CVE identifiers, version numbers, command-line flags, environment
+      variables.
+    - Preserve markdown exactly. In a link `[text](url)` translate the text and keep the url
+      byte for byte. Keep inline code spans and backticks where they are.
+    - Never add, merge, split or drop a list item, and never add an explanation of your own.
+    - When an item starts with a role word and a colon (`Исправление:`, `Внутренние изменения:`),
+      translate the word and keep the colon.
+    - If a translated item contains a colon followed by a space, wrap the whole item in double
+      quotes. An unquoted colon turns the item into a YAML mapping and breaks the release.
+    - Write idiomatic English that reads as if written from scratch, in the present tense, saying
+      what changed for the user. Do not transliterate Russian sentence structure."""
+
+
+    def version_key(path: Path):
+        m = VERSION_FILE.match(path.name)
+        return tuple(int(m.group(i)) for i in (1, 2, 3)) if m else (0, 0, 0)
+
+
+    def lang_of(path: Path) -> str:
+        return "ru" if path.name.endswith(".ru.yml") else "en"
+
+
+    def counterpart(path: Path) -> Path:
+        if lang_of(path) == "ru":
+            return path.with_name(path.name.replace(".ru.yml", ".yml"))
+        return path.with_name(path.name.replace(".yml", ".ru.yml"))
+
+
+    def parse_section(text: str, lang: str):
+        """Return (section_items, errors, style). section_items is None when unusable.
+
+        `style` holds the items that parsed as a single-key mapping instead of a string --
+        the `Исправление: текст` house style. Those are reported as warnings, never errors:
+        the release-notes generator renders them as "key: value" and the current changelog of
+        every module is written that way, so failing on them would block every release. They
+        still deserve the warning, because in Console such an item is rendered by the
+        recursive changelog view as a nested dictionary -- a heading per bullet -- and because
+        a line wrap landing in front of the colon turns exactly this into the hard parse error
+        that kept snapshot-controller v0.2.0 out of every cluster.
+        """
+        errors, style = [], []
+        try:
+            doc = yaml.safe_load(text)
+        except Exception as exc:
+            first = str(exc).splitlines()[0]
+            return None, ["does not parse as YAML: %s" % first], style
+        if doc is None:
+            return None, ["is empty"], style
+        if not isinstance(doc, dict):
+            return None, ["top level is %s, expected a mapping" % type(doc).__name__], style
+        key = SECTION_KEY[lang]
+        if key not in doc:
+            return (
+                None,
+                ["has no %r key (keys present: %s)" % (key, ", ".join(map(str, doc)))],
+                style,
+            )
+        items = doc[key]
+        if not isinstance(items, list):
+            return None, ["%r is %s, expected a list" % (key, type(items).__name__)], style
+        if not items:
+            return None, ["%r is an empty list" % key], style
+        for i, item in enumerate(items):
+            if isinstance(item, str):
+                if not item.strip():
+                    errors.append("item %d is blank" % (i + 1))
+                continue
+            if isinstance(item, dict) and len(item) == 1:
+                style.append(
+                    "item %d parsed as a mapping, not a string -- an unquoted ': ' inside the "
+                    "text: %s" % (i + 1, json.dumps(item, ensure_ascii=False)[:160])
+                )
+            else:
+                errors.append(
+                    "item %d is %s, expected a string: %s"
+                    % (i + 1, type(item).__name__, str(item)[:160])
+                )
+        return items, errors, style
+
+
+    def validate_file(path: Path):
+        """Return (errors, warnings) for one changelog file."""
+        errors, warnings = [], []
+        if not VERSION_FILE.match(path.name):
+            errors.append("name does not match v<major>.<minor>.<patch>[.ru].yml")
+            return errors, warnings
+        lang = lang_of(path)
+        text = path.read_text(encoding="utf-8")
+        items, problems, style = parse_section(text, lang)
+        warnings.extend(style)
+        if items is None:
+            return problems, warnings
+        errors.extend(problems)
+        if lang == "en" and CYRILLIC.search(text):
+            errors.append("holds Cyrillic -- the English file was never translated")
+        if lang == "ru" and not CYRILLIC.search(text):
+            warnings.append("holds no Cyrillic -- is this really the Russian file?")
+        other = counterpart(path)
+        if other.exists():
+            other_items, other_problems, _ = parse_section(
+                other.read_text(encoding="utf-8"), lang_of(other)
+            )
+            if other_items is not None and len(other_items) != len(items):
+                errors.append(
+                    "has %d items but %s has %d -- the pair diverged"
+                    % (len(items), other.name, len(other_items))
+                )
+            elif other_items is None:
+                warnings.append("counterpart %s is unusable: %s" % (other.name, other_problems[0]))
+        return errors, warnings
+
+
+    def cmd_validate(argv) -> int:
+        require_exists = "--require-exists" in argv
+        strict_all = "--all" in argv
+        listed = [Path(a) for a in argv if not a.startswith("--")]
+
+        if strict_all:
+            strict = sorted(CHANGELOG_DIR.glob("v*.yml"), key=version_key)
+        else:
+            strict = listed
+
+        errors = 0
+        for path in strict:
+            if not path.exists():
+                if require_exists:
+                    print("ERROR %s: does not exist" % path, file=sys.stderr)
+                    errors += 1
+                else:
+                    print("skip %s: does not exist (deleted?)" % path, file=sys.stderr)
+                continue
+            file_errors, file_warnings = validate_file(path)
+            for w in file_warnings:
+                print("WARN  %s: %s" % (path, w), file=sys.stderr)
+            for e in file_errors:
+                print("ERROR %s: %s" % (path, e), file=sys.stderr)
+            errors += len(file_errors)
+            if not file_errors and not file_warnings:
+                print("ok    %s" % path, file=sys.stderr)
+
+        strict_set = {p.resolve() for p in strict if p.exists()}
+        advisory = 0
+        if CHANGELOG_DIR.is_dir():
+            for path in sorted(CHANGELOG_DIR.glob("v*.yml"), key=version_key):
+                if path.resolve() in strict_set:
+                    continue
+                file_errors, file_warnings = validate_file(path)
+                for msg in file_errors + file_warnings:
+                    print("WARN  %s: %s" % (path, msg), file=sys.stderr)
+                    advisory += 1
+
+        if advisory:
+            print(
+                "\n%d problem(s) in files this change does not touch -- reported as warnings."
+                % advisory,
+                file=sys.stderr,
+            )
+        if errors:
+            print("\n%d error(s). Not letting this changelog through." % errors, file=sys.stderr)
+            return 1
+        print("\nChangelog validation passed.", file=sys.stderr)
+        return 0
+
+
+    def openwebui_chat(messages) -> str:
+        key = os.environ.get("OPENWEBUI_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "OPENWEBUI_API_KEY is not set. Add it as a masked, NON-protected CI/CD variable."
+            )
+        body = json.dumps(
+            {
+                "model": OPENWEBUI_MODEL,
+                "stream": False,
+                "temperature": 0,
+                "messages": messages,
+            }
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            OPENWEBUI_URL + "/api/chat/completions",
+            data=body,
+            headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+            method="POST",
+        )
+        last_error = None
+        for attempt in range(1, 4):
+            try:
+                with urllib.request.urlopen(request, timeout=300) as response:
+                    payload = json.load(response)
+                break
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", "replace")[:400]
+                last_error = "HTTP %s: %s" % (exc.code, detail)
+                if exc.code not in (408, 409, 429, 500, 502, 503, 504):
+                    raise RuntimeError("OpenWebUI rejected the request -- %s" % last_error)
+            except (urllib.error.URLError, TimeoutError) as exc:
+                last_error = str(exc)
+            if attempt < 3:
+                time.sleep(3 * attempt)
+        else:
+            raise RuntimeError("OpenWebUI unreachable after 3 attempts -- %s" % last_error)
+
+        usage = payload.get("usage") or {}
+        if usage:
+            print(
+                "    tokens: prompt %s, completion %s"
+                % (usage.get("prompt_tokens"), usage.get("completion_tokens")),
+                file=sys.stderr,
+            )
+        try:
+            return payload["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            raise RuntimeError(
+                "OpenWebUI answered without a message: %s"
+                % json.dumps(payload, ensure_ascii=False)[:400]
+            )
+
+
+    def strip_fences(text: str) -> str:
+        stripped = text.strip()
+        if not stripped.startswith("```"):
+            return stripped + "\n"
+        lines = stripped.splitlines()[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        return "\n".join(lines).strip() + "\n"
+
+
+    def check_translation(translated: str, source_items) -> list:
+        problems = []
+        items, structural, style = parse_section(translated, "en")
+        if items is None:
+            return structural
+        problems.extend(structural)
+        # Unlike an existing hand-written file, a freshly generated one has no excuse: the
+        # model is told to double-quote anything holding ': ', so a mapping item here means it
+        # ignored the instruction. Rejecting it is what makes the English file a clean list of
+        # strings while the Russian source still carries the legacy style.
+        problems.extend(style)
+        if len(items) != len(source_items):
+            problems.append(
+                "holds %d items, the Russian file holds %d -- items were added or dropped"
+                % (len(items), len(source_items))
+            )
+        if CYRILLIC.search(translated):
+            leftovers = [line.strip() for line in translated.splitlines() if CYRILLIC.search(line)]
+            problems.append("still holds Cyrillic: %s" % "; ".join(leftovers[:3]))
+        return problems
+
+
+    def translate_one(ru_path: Path, source_items) -> str:
+        source = ru_path.read_text(encoding="utf-8")
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": source},
+        ]
+        for attempt in range(1, ATTEMPTS + 1):
+            print("  attempt %d/%d via %s" % (attempt, ATTEMPTS, OPENWEBUI_MODEL), file=sys.stderr)
+            answer = strip_fences(openwebui_chat(messages))
+            problems = check_translation(answer, source_items)
+            if not problems:
+                return answer
+            for p in problems:
+                print("    rejected: %s" % p, file=sys.stderr)
+            if attempt == ATTEMPTS:
+                raise RuntimeError(
+                    "translation of %s is still wrong after %d attempts: %s"
+                    % (ru_path.name, ATTEMPTS, "; ".join(problems))
+                )
+            messages = messages[:2] + [
+                {"role": "assistant", "content": answer},
+                {
+                    "role": "user",
+                    "content": "That output is not acceptable: "
+                    + "; ".join(problems)
+                    + ". Output the corrected YAML only, nothing else.",
+                },
+            ]
+        raise RuntimeError("unreachable")
+
+
+    def cmd_translate(argv) -> int:
+        listed = [Path(a) for a in argv if not a.startswith("--")]
+        ru_files = [p for p in listed if p.name.endswith(".ru.yml") and p.exists()]
+        if listed and not ru_files:
+            # Never quietly fall back to the whole directory when the caller named files: a
+            # typo or a stale path would then retranslate every release ever published.
+            print(
+                "None of the named files is an existing .ru.yml: %s"
+                % ", ".join(str(p) for p in listed),
+                file=sys.stderr,
+            )
+            return 1
+        if not ru_files:
+            ru_files = sorted(CHANGELOG_DIR.glob("v*.ru.yml"), key=version_key)
+        ru_files = [p for p in ru_files if VERSION_FILE.match(p.name)]
+        if not ru_files:
+            print("No versioned .ru.yml file to translate.", file=sys.stderr)
+            return 0
+        ru_files.sort(key=version_key, reverse=True)
+
+        written = []
+        for ru_path in ru_files:
+            en_path = counterpart(ru_path)
+            source_items, problems, _ = parse_section(ru_path.read_text(encoding="utf-8"), "ru")
+            if source_items is None:
+                print("ERROR %s: %s" % (ru_path, problems[0]), file=sys.stderr)
+                return 1
+            if en_path.exists():
+                existing = en_path.read_text(encoding="utf-8")
+                if not CYRILLIC.search(existing):
+                    print(
+                        "%s already exists and holds no Cyrillic, leaving it as is." % en_path.name,
+                        file=sys.stderr,
+                    )
+                    continue
+                print(
+                    "%s exists but still holds Cyrillic, regenerating it." % en_path.name,
+                    file=sys.stderr,
+                )
+            print("Translating %s -> %s" % (ru_path.name, en_path.name), file=sys.stderr)
+            try:
+                translated = translate_one(ru_path, source_items)
+            except RuntimeError as exc:
+                print("ERROR %s" % exc, file=sys.stderr)
+                return 1
+            en_path.write_text(translated, encoding="utf-8")
+            written.append((version_key(ru_path), ru_path, en_path))
+
+        if not written:
+            return 0
+        written.sort(reverse=True)
+        _, top_ru, top_en = written[0]
+        version = "v%d.%d.%d" % version_key(top_ru)
+        print("VERSION=%s" % version)
+        print("RU_FILE=%s" % top_ru.name)
+        print("ENG_FILE=%s" % top_en.name)
+        return 0
+
+
+    def main() -> int:
+        if len(sys.argv) < 2:
+            print(__doc__, file=sys.stderr)
+            return 2
+        command, argv = sys.argv[1], sys.argv[2:]
+        if command == "validate":
+            return cmd_validate(argv)
+        if command == "translate":
+            return cmd_translate(argv)
+        print("unknown command %r" % command, file=sys.stderr)
+        return 2
+
+
+    if __name__ == "__main__":
+        raise SystemExit(main())
+    CHANGELOG_TOOL_PYEOF
+
+.changelog_python_env: &changelog_python_env
+  - |
+    set -e
+    missing=""
+    for bin in git curl jq python3; do
+      command -v "$bin" >/dev/null 2>&1 || missing="$missing $bin"
+    done
+    if [ -n "$missing" ]; then
+      if [ "$(id -u)" = "0" ]; then
+        apt-get update -qq && apt-get install -y -qq $missing
+      else
+        echo "Missing required tools:$missing. Install them on the runner host (shell executor has no root)." >&2
+        exit 1
+      fi
+    fi
+    python3 -m venv /tmp/venv
+    /tmp/venv/bin/pip install --no-cache-dir PyYAML
+
+# Resolve which changelog files the current pipeline is responsible for, into $CHANGED.
+# Empty means "nothing to check here".
+.changelog_changed_files: &changelog_changed_files
+  - |
+    CHANGELOG_PATH="${TRANSLATE_CHANGELOG_PATH}"
+    if [ -n "${CI_COMMIT_TAG:-}" ]; then
+      CHANGED="${CHANGELOG_PATH}/${CI_COMMIT_TAG}.ru.yml ${CHANGELOG_PATH}/${CI_COMMIT_TAG}.yml"
+      echo "Tag pipeline: holding ${CI_COMMIT_TAG} to its own changelog files."
+    elif [ -n "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" ]; then
+      # The MR diff base is present in the shallow clone, so this needs no extra fetch.
+      CHANGED=$(git diff --name-only --diff-filter=d "${CI_MERGE_REQUEST_DIFF_BASE_SHA}" HEAD -- "${CHANGELOG_PATH}" || true)
+    else
+      CHANGED=$(git show --name-only --diff-filter=d --pretty=format: HEAD -- "${CHANGELOG_PATH}" || true)
+    fi
+    CHANGED=$(printf '%s\n' "$CHANGED" | grep -E "\.ya?ml$" || true)
+    echo "Changelog files in scope:"
+    printf '  %s\n' ${CHANGED:-"(none)"}
+
+# ---------------------------------------------------------------------------
+# Validation gate
+# ---------------------------------------------------------------------------
+.changelog_validate:
+  stage: pre
+  image:
+    name: python:3.11-slim
+    entrypoint: [""]
+  variables:
+    TRANSLATE_CHANGELOG_PATH: "CHANGELOG"
+    CHANGELOG_VALIDATE_SCOPE: "changed"
+    CHANGELOG_REQUIRE_ON_TAG: "true"
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - *changelog_python_env
+    - *changelog_tool_script
+  script:
+    - *changelog_changed_files
+    - |
+      set -euo pipefail
+      export PATH="/tmp/venv/bin:$PATH"
+      TOOL="${CI_PROJECT_DIR}/.changelog-tool/changelog_tool.py"
+      ARGS=""
+      if [ "${CHANGELOG_VALIDATE_SCOPE}" = "all" ]; then
+        ARGS="--all"
+      elif [ -z "${CHANGED:-}" ]; then
+        echo "No changelog file touched by this change; nothing to validate strictly."
+      fi
+      if [ -n "${CI_COMMIT_TAG:-}" ] && [ "${CHANGELOG_REQUIRE_ON_TAG}" = "true" ]; then
+        ARGS="${ARGS} --require-exists"
+      fi
+      cd "${CI_PROJECT_DIR}"
+      python3 "$TOOL" validate ${ARGS} ${CHANGED}
+
+# ---------------------------------------------------------------------------
+# Translate and open the MR
+# ---------------------------------------------------------------------------
 .translate_and_create_mr:
   stage: pre
   image:
@@ -24,24 +595,17 @@
     TRANSLATE_CHANGELOG_PATH: "CHANGELOG"
     TRANSLATE_BASE_BRANCH: "main"
   rules:
+    # The tag guard matters: on a tag pipeline CI_COMMIT_BRANCH is empty, so the branch
+    # condition alone was true there, and CI_COMMIT_REF_NAME is the tag. A tag whose commit
+    # touches CHANGELOG/*.ru.yml would then reach `git push origin HEAD:<tag>` and create a
+    # branch named after the release. It only stayed invisible because the English file is
+    # already in place by then and the job exits early.
+    - if: $CI_COMMIT_TAG
+      when: never
     - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   before_script:
-    - |
-      set -e
-      missing=""
-      for bin in git curl jq python3; do
-        command -v "$bin" >/dev/null 2>&1 || missing="$missing $bin"
-      done
-      if [ -n "$missing" ]; then
-        if [ "$(id -u)" = "0" ]; then
-          apt-get update -qq && apt-get install -y -qq $missing
-        else
-          echo "Missing required tools:$missing. Install them on the runner host (shell executor has no root)." >&2
-          exit 1
-        fi
-      fi
-    - python3 -m venv /tmp/venv
-    - /tmp/venv/bin/pip install --no-cache-dir deep-translator packaging
+    - *changelog_python_env
+    - *changelog_tool_script
     # Use local (repo-scoped) git config to avoid writing to $HOME on shell executors.
     - git -C "${CI_PROJECT_DIR}" config user.email "gitlab-ci@gitlab.com"
     - git -C "${CI_PROJECT_DIR}" config user.name "GitLab CI"
@@ -49,120 +613,31 @@
     - |
       set -euo pipefail
       export PATH="/tmp/venv/bin:$PATH"
+      TOOL="${CI_PROJECT_DIR}/.changelog-tool/changelog_tool.py"
       CHANGELOG_PATH="${TRANSLATE_CHANGELOG_PATH}"
-      # Check if last commit added or modified CHANGELOG/*.ru.yml (--diff-filter=d skips deletions,
-      # which have nothing to translate — e.g. a revert that drops a release changelog)
-      CHANGED=$(git show --name-only --diff-filter=d --pretty=format: HEAD | grep "^${CHANGELOG_PATH}/.*\.ru\.yml$" || true)
+      cd "${CI_PROJECT_DIR}"
+
+      # Only the .ru.yml files touched by the last commit are translated. --diff-filter=d
+      # skips deletions, which have nothing to translate (a revert that drops a changelog).
+      CHANGED=$(git show --name-only --diff-filter=d --pretty=format: HEAD -- "${CHANGELOG_PATH}" \
+        | grep -E "\.ru\.yml$" || true)
       if [ -z "$CHANGED" ]; then
         echo "No CHANGELOG .ru.yml files changed in last commit, skipping."
         exit 0
       fi
-      echo "CHANGELOG .ru.yml files changed in last commit: $CHANGED"
-      # Run translation (use project script if present, else inline Python)
-      if [ -f "${CI_PROJECT_DIR}/scripts/translate_changelog.py" ]; then
-        TRANSLATE_OUTPUT=$(cd "${CI_PROJECT_DIR}" && printf '%s\n' "$CHANGED" | python3 scripts/translate_changelog.py "$CHANGELOG_PATH") || TRANSLATE_FAILED=1
-      else
-        TRANSLATE_OUTPUT=$(cd "${CI_PROJECT_DIR}" && printf '%s\n' "$CHANGED" | python3 - "$CHANGELOG_PATH" << 'PYEOF'
-      import re, sys, time
-      from pathlib import Path
-      try:
-          from packaging import version as pkg_version
-          from deep_translator import GoogleTranslator
-      except ImportError as e:
-          print(f"Import error: {e}", file=sys.stderr)
-          sys.exit(1)
-      CYRILLIC = re.compile(r"[\u0400-\u04FF]")
-      ATTEMPTS = 3
-      changelog_dir = sys.argv[1]
-      # The changed .ru.yml files, one per line on stdin. Falls back to every
-      # v*.ru.yml in the directory when nothing is piped in.
-      changed = [l.strip() for l in sys.stdin.read().splitlines() if l.strip()]
-      path = Path(changelog_dir)
-      if not path.exists():
-          sys.exit(0)
-      ru_files = [Path(c) for c in changed] if changed else list(path.glob("v*.ru.yml"))
-      versions = []
-      for f in ru_files:
-          m = re.match(r"v(\d+\.\d+\.\d+)\.ru\.yml", f.name)
-          if m and f.exists():
-              try:
-                  versions.append((pkg_version.parse(m.group(1)), f))
-              except pkg_version.InvalidVersion:
-                  pass
-      if not versions:
-          print("No versioned .ru.yml file to translate.", file=sys.stderr)
-          sys.exit(0)
-      versions.sort(reverse=True, key=lambda x: x[0])
+      echo "CHANGELOG .ru.yml files changed in last commit:"
+      printf '  %s\n' $CHANGED
 
-      def translate_line(translator, text):
-          """Translate one line, retrying transient failures.
+      # Validate the source before spending a model call on it: a Russian file that does not
+      # parse cannot be translated into anything meaningful.
+      python3 "$TOOL" validate $CHANGED
 
-          deep_translator returns the source string on some failures instead of
-          raising, so a result that still holds Cyrillic counts as a failure too.
-          """
-          last_err = None
-          for attempt in range(1, ATTEMPTS + 1):
-              try:
-                  out = translator.translate(text)
-              except Exception as e:  # noqa: BLE001 - any backend error is retryable
-                  out, last_err = None, e
-              if out and not CYRILLIC.search(out):
-                  return out, None
-              if attempt < ATTEMPTS:
-                  time.sleep(2 * attempt)
-          return None, last_err
-
-      translator = GoogleTranslator(source="ru", target="en")
-      untranslated = []
-      written = []
-      for ver, ru_path in versions:
-          eng_path = ru_path.with_name(ru_path.name.replace(".ru.yml", ".yml"))
-          if eng_path.exists():
-              existing = eng_path.read_text(encoding="utf-8")
-              if not CYRILLIC.search(existing):
-                  print(f"{eng_path.name} already exists and holds no Cyrillic, leaving it as is.",
-                        file=sys.stderr)
-                  continue
-              print(f"{eng_path.name} exists but still holds Cyrillic, regenerating it.",
-                    file=sys.stderr)
-          out_lines = []
-          for line in ru_path.read_text(encoding="utf-8").splitlines(keepends=True):
-              if not line.strip():
-                  out_lines.append(line)
-                  continue
-              indent = " " * (len(line) - len(line.lstrip()))
-              content = line.strip()
-              if not CYRILLIC.search(content):
-                  out_lines.append(indent + content + "\n")
-                  continue
-              translated, err = translate_line(translator, content)
-              if translated is None:
-                  untranslated.append((ru_path.name, content, err))
-                  out_lines.append(indent + content + "\n")
-              else:
-                  out_lines.append(indent + translated + "\n")
-          eng_path.write_text("".join(out_lines), encoding="utf-8")
-          written.append((ver, ru_path, eng_path))
-      if untranslated:
-          print(f"Translation failed for {len(untranslated)} line(s); refusing to commit a "
-                f"half-Russian changelog:", file=sys.stderr)
-          for name, content, err in untranslated:
-              print(f"  {name}: {content}" + (f" ({err})" if err else ""), file=sys.stderr)
-          sys.exit(1)
-      if not written:
-          sys.exit(0)
-      top_ver, top_ru, top_eng = written[0]
-      print(f"VERSION=v{top_ver}")
-      print(f"RU_FILE={top_ru.name}")
-      print(f"ENG_FILE={top_eng.name}")
-      PYEOF
-      ) || TRANSLATE_FAILED=1
-      fi
+      TRANSLATE_OUTPUT=$(python3 "$TOOL" translate $CHANGED) || TRANSLATE_FAILED=1
       if [ -n "${TRANSLATE_FAILED:-}" ]; then
         echo "Translation failed, see the errors above. Not committing anything." >&2
         exit 1
       fi
-      # Parse VERSION from output; if missing, nothing was translated.
+
       # `|| true` is required: under `set -o pipefail` a non-matching grep would fail the
       # assignment and `set -e` would kill the job before the check below could run.
       VERSION=$(echo "$TRANSLATE_OUTPUT" | grep "^VERSION=" | cut -d= -f2 || true)
@@ -174,7 +649,13 @@
       RU_FILE=$(echo "$TRANSLATE_OUTPUT" | grep "^RU_FILE=" | cut -d= -f2)
       ENG_FILE=$(echo "$TRANSLATE_OUTPUT" | grep "^ENG_FILE=" | cut -d= -f2)
       echo "Translated $RU_FILE -> $ENG_FILE (version $VERSION)"
+
+      # Validate the pair that is about to be committed, English file included. This is the
+      # gate that would have stopped the snapshot-controller v0.2.0 release.
+      python3 "$TOOL" validate "${CHANGELOG_PATH}/${RU_FILE}" "${CHANGELOG_PATH}/${ENG_FILE}"
+
       # Commit and push
+      rm -rf "${CI_PROJECT_DIR}/.changelog-tool"
       git add "${CHANGELOG_PATH}/"
       git status
       if git diff --staged --quiet; then
@@ -182,7 +663,9 @@
         exit 0
       fi
       git commit -m "Translate changelog ${VERSION} to English"
-      BRANCH="${CI_COMMIT_REF_NAME:-${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME}}"
+      # Both fallbacks need the `:-` guard: under `set -u` an unset second operand aborts the
+      # shell before the friendly error below can run.
+      BRANCH="${CI_COMMIT_REF_NAME:-${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME:-}}"
       if [ -z "$BRANCH" ]; then
         echo "Cannot push: CI_COMMIT_REF_NAME and CI_MERGE_REQUEST_SOURCE_BRANCH_NAME are empty."
         exit 1
