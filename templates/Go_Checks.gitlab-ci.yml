@@ -352,6 +352,29 @@
 
         cd "$dir" || continue
 
+        # The require paths of THIS go.mod, block form and single-line form alike.
+        # `go list -m all` walks the whole module graph, but the finding this job
+        # reports names a file -- "... in images/controller/go.mod" -- so it may only
+        # judge what that file actually pins. Everything else is somebody else's
+        # require, arriving through a dependency, and a consumer cannot fix it by
+        # editing a version string:
+        #
+        #   github.com/deckhouse/deckhouse is a monorepo that `replace`s its own
+        #   submodules, so a repository importing a single package from it inherits
+        #   dhctl, go_lib/*, pkg/registry and friends -- several as the placeholder
+        #   v0.0.0-00010101000000-000000000000, which has no real version to point at.
+        #   Pinning them by hand needs explicit `require` lines for modules the
+        #   repository does not import, and the next `go mod tidy` deletes them again.
+        #
+        # storage-foundation is the case in point: six such findings, all named against
+        # images/controller/go.mod, none of them present in it.
+        local_requires=$(awk '
+          /^require[[:space:]]*\(/ { inblock = 1; next }
+          inblock && /^\)/         { inblock = 0; next }
+          inblock && NF >= 1       { print $1; next }
+          /^require[[:space:]]+/   { print $2 }
+        ' go.mod)
+
         # `-e` matters: a module graph containing replace-placeholder versions
         # (v0.0.0-00010101000000-000000000000, which `go mod tidy` writes for a module
         # resolved from the working tree) makes plain `go list -m all` exit non-zero
@@ -362,6 +385,11 @@
         go list -m -e all | grep deckhouse | grep -v '=>' | while IFS= read -r line; do
           module_name=$(echo "$line" | awk '{print $1}')
           module_version=$(echo "$line" | awk '{print $2}')
+
+          if [ -n "$module_version" ] && ! printf '%s\n' "$local_requires" | grep -qxF "$module_name"; then
+            echo "  $module_name is not required by $dir/go.mod (reached through the module graph), skipping"
+            continue
+          fi
 
           if [ -z "$module_version" ]; then
             echo "  Checking module name $module_name"
