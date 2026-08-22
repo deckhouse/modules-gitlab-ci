@@ -5,6 +5,12 @@
 #   - GO_BUILD_TAGS variable (space-separated list of build tags / editions)
 #   - `go` available in $PATH
 #
+# Optional variables:
+#   GO_TESTS_EXCLUDE_REGEX     (.go_tests) skips test FILES whose path matches
+#   GO_COVERAGE_EXCLUDE_REGEX  (.go_test_coverage) skips PACKAGES whose import path
+#                              matches -- for cluster-dependent suites that share a
+#                              module with the libraries they exercise
+#
 # Example usage in a project:
 #
 #   include:
@@ -266,6 +272,11 @@
         echo "No images/ directory; covering every go.mod in the repository instead."
       fi
 
+      # GO_COVERAGE_EXCLUDE_REGEX (optional, ERE) drops packages whose import path
+      # matches it. A plain Go project keeps its libraries and its cluster-dependent
+      # suites in the same module, and those suites fail here by design: they want a
+      # provisioned cluster and credentials, not `go test`. `.go_tests` never saw them
+      # because it only walks images/, so this job is where they surface.
       find "$gomod_root" -type f -name "go.mod" -not -path "*/vendor/*" | while read -r gomod; do
         dir=$(dirname "$gomod")
 
@@ -282,9 +293,31 @@
           echo "  Could not parse 'go' directive from $dir/go.mod; falling back to GOTOOLCHAIN=auto"
         fi
 
+        # Enumerate the packages instead of passing ./... so they can be filtered, and
+        # so a module that holds no packages at all is skipped rather than failing the
+        # job. A go.mod with no Go files is a normal thing to have -- it stands in for
+        # upstream modules a `replace` points at -- and `go test ./...` there exits
+        # non-zero with "matched no packages", which under `set -e` killed the whole job
+        # before the modules that do have tests were ever reached.
+        pkgs=$(go list ./... 2>/dev/null || true)
+        if [ -n "${GO_COVERAGE_EXCLUDE_REGEX:-}" ] && [ -n "$pkgs" ]; then
+          dropped=$(printf '%s\n' "$pkgs" | grep -E "$GO_COVERAGE_EXCLUDE_REGEX" || true)
+          if [ -n "$dropped" ]; then
+            echo "  Excluded by GO_COVERAGE_EXCLUDE_REGEX=$GO_COVERAGE_EXCLUDE_REGEX:"
+            printf '    %s\n' $dropped
+          fi
+          pkgs=$(printf '%s\n' "$pkgs" | grep -vE "$GO_COVERAGE_EXCLUDE_REGEX" || true)
+        fi
+        if [ -z "$pkgs" ]; then
+          echo "  No packages to cover here, skipping."
+          cd - > /dev/null
+          echo "----------------------------------------"
+          continue
+        fi
+
         for tag in $GO_BUILD_TAGS; do
           echo "  Build tag: $tag"
-          go test ./... -cover -tags "$tag"
+          go test $pkgs -cover -tags "$tag"
         done
 
         cd - > /dev/null
