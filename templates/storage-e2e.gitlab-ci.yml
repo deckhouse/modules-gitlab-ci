@@ -54,6 +54,7 @@
 #   E2E_GO_TEST_TIMEOUT    go test -timeout                    (default: 3h30m)
 #   E2E_BOOTSTRAP_TIMEOUT  budget for one bootstrap-cluster run (default: 140m)
 #   E2E_TEARDOWN_TIMEOUT   budget for one remove-cluster run   (default: 25m)
+#   E2E_CLUSTER_NAME_MAX   longest cluster name a stand accepts (default: 35)
 #
 # --------------------------------------------------------------------------
 # Required CI/CD variables (commander provider) — set at group/project level
@@ -245,6 +246,17 @@ e2e_resolve:
   extends: .e2e_base
   stage: e2e
   script:
+    # The cluster name comes from storage-e2e's e2e-cluster-name.sh rather than
+    # being assembled inline: it is unit-tested there, and the rule it encodes
+    # belongs with the framework that has to live inside the limit.
+    #
+    # The name becomes the cloud prefix of every node the template creates, and
+    # DKP's node-manager webhook refuses a NodeGroup whose prefix + group name
+    # exceeds 42 characters. e2e-sds-node-configurator-mr376-5e04 was one over,
+    # so its ubuntu and debian groups were rejected on every single run and the
+    # cluster came up with two nodes of five. The script abbreviates a multi-dash
+    # slug to fit: sds-node-configurator becomes snc.
+    - *e2e_clone_storage_e2e
     - |
       set -euo pipefail
       labels="${CI_MERGE_REQUEST_LABELS:-}"
@@ -253,7 +265,8 @@ e2e_resolve:
       # UNIQUE cluster/namespace name — two runs of the same MR no longer collide
       # on one cluster. All phases share this value via the dotenv artifact.
       suffix="$(printf '%04x' "$((RANDOM))")"
-      namespace="e2e-${E2E_MODULE_SLUG}-mr${CI_MERGE_REQUEST_IID}-${suffix}"
+      namespace="$(bash "${CI_PROJECT_DIR}/_storage-e2e/.github/scripts/e2e-cluster-name.sh" \
+        "${E2E_MODULE_SLUG}" "mr${CI_MERGE_REQUEST_IID}" "${suffix}")"
 
       keep_cluster=false
       case ",${labels}," in
