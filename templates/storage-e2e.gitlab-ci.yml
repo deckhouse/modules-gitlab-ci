@@ -52,6 +52,8 @@
 #   E2E_DEFAULT_LABEL_FILTER default Ginkgo filter             (default: !stress-test)
 #   E2E_GO_BOOTSTRAP_VERSION Go toolchain to fetch if absent   (default: 1.26.4)
 #   E2E_GO_TEST_TIMEOUT    go test -timeout                    (default: 3h30m)
+#   E2E_BOOTSTRAP_TIMEOUT  budget for one bootstrap-cluster run (default: 140m)
+#   E2E_TEARDOWN_TIMEOUT   budget for one remove-cluster run   (default: 25m)
 #
 # --------------------------------------------------------------------------
 # Required CI/CD variables (commander provider) — set at group/project level
@@ -61,7 +63,17 @@
 #   (optional) E2E_COMMANDER_TEMPLATE_VERSION, E2E_COMMANDER_REGISTRY_NAME,
 #              E2E_COMMANDER_VALUES, E2E_COMMANDER_AUTH_METHOD,
 #              E2E_COMMANDER_API_PREFIX, E2E_COMMANDER_INSECURE_SKIP_TLS_VERIFY,
-#              E2E_COMMANDER_WAIT_TIMEOUT, E2E_COMMANDER_SSH_JUMP_*, GOPROXY
+#              E2E_COMMANDER_WAIT_TIMEOUT, E2E_COMMANDER_BOOTSTRAP_ATTEMPTS,
+#              E2E_COMMANDER_DELETE_WAIT_TIMEOUT, E2E_COMMANDER_SSH_JUMP_*, GOPROXY
+#
+# A bootstrap Commander reports as creation_failed is terminal: it never retries
+# the task, and the cluster keeps that status until somebody deletes it. So the
+# provider discards such a cluster and builds a new one, up to
+# E2E_COMMANDER_BOOTSTRAP_ATTEMPTS times (default 2) — which is what absorbs a
+# transient stand problem — and does the same for a cluster an earlier teardown
+# left in `deleting`. Set the variable to 1 to fail on the first attempt instead.
+# The e2e/keep-cluster label disables the rebuilding on its own, so a broken
+# cluster stays available for inspection without touching this.
 #
 # Self-signed Commander certificate: set E2E_COMMANDER_INSECURE_SKIP_TLS_VERIFY
 # to "true" to skip TLS verification of the Commander API entirely — no CA
@@ -93,6 +105,15 @@ variables:
   E2E_DEFAULT_LABEL_FILTER: "!stress-test"
   E2E_GO_BOOTSTRAP_VERSION: "1.26.4"
   E2E_GO_TEST_TIMEOUT: "3h30m"
+  # Budgets for the provisioning binaries, which fit their waits and their retries
+  # into what is left of them. Bootstrap needs room for the attempts the provider
+  # is allowed: with the commander provider that is E2E_COMMANDER_WAIT_TIMEOUT per
+  # attempt (60m at group level) times E2E_COMMANDER_BOOTSTRAP_ATTEMPTS (2), plus
+  # the module enablement that follows — hence 140m inside a 150m job. A retry is
+  # skipped when the budget left cannot hold one, so a smaller value here does not
+  # break anything; it only gives up the second attempt sooner.
+  E2E_BOOTSTRAP_TIMEOUT: "140m"
+  E2E_TEARDOWN_TIMEOUT: "25m"
   # Set to "true" to trust a self-signed Commander certificate WITHOUT providing
   # a CA (skips TLS verification of the Commander API). Leave "false" and use
   # E2E_COMMANDER_CA_CERT[_B64] to pin the CA instead. Override with a project
@@ -271,7 +292,9 @@ e2e_bootstrap:
   needs:
     - job: e2e_resolve
       artifacts: true
-  timeout: 90m
+  # Must outlive E2E_BOOTSTRAP_TIMEOUT: the binary stops itself at its own budget
+  # and reports why, which is worth far more than the runner killing the job.
+  timeout: 150m
   script:
     - *e2e_clone_storage_e2e
     - |
