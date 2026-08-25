@@ -89,6 +89,44 @@ variables:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
 
+# Publishing policy for a release tag.
+#
+# The prod build of a module used to be `when: manual` on every tag, so cutting a release
+# meant pressing play once per edition -- and nothing tied those presses to the release
+# gates: a red pipeline still left the buttons available. A module that references these
+# rules instead publishes by itself as soon as a release tag exists, and only then:
+#
+#   - `vX.Y.Z` (exactly three numeric components) builds automatically. This is the shape
+#     `Merge_Release` creates, so it is a release and nothing else;
+#   - any other tag -- a release candidate, a hand-made or an experimental one -- keeps the
+#     previous manual behaviour, so an ad-hoc tag never writes to the prod registry on its
+#     own.
+#
+# `when` is set inside each rule on purpose: a consuming job usually inherits a job-level
+# `when: manual` from its own prod mixin, and a rule-level `when` is what overrides it.
+#
+# The rules only decide *when* the build starts. What makes the release gates binding is
+# the `needs` on the consuming side:
+#
+#   build_prod:
+#     extends: [.build, .prod]
+#     rules: !reference [.prod_build_rules, rules]
+#     needs: ["Validate release notes"]
+#
+# With that `needs`, invalid release notes stop the publication instead of merely painting
+# the pipeline red. The gate job has to exist in the tag pipeline for this to resolve --
+# `.release_notes_validate` from Release_Notes.gitlab-ci.yml does, under that exact name.
+# A module still on the flat changelog format should not reference these rules.
+#
+# Deploy jobs are deliberately left alone: moving a release channel stays a separate,
+# manual decision, and it is a `crane copy` of an already published bundle anyway.
+.prod_build_rules:
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/ && $CI_COMMIT_BRANCH != "main"
+      when: on_success
+    - if: $CI_COMMIT_TAG && $CI_COMMIT_BRANCH != "main"
+      when: manual
+
 .svace_rules_mr:
   rules:
     - if: '$CI_MERGE_REQUEST_LABELS =~ /(^|,)analyze\/svace(,|$)/'

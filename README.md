@@ -38,13 +38,49 @@ Template **Merge_Release.gitlab-ci.yml** implements the same flow as [modules-ac
 2. **Version:** Extracted from MR title (e.g. `v0.3.17` or `0.3.17`).
 3. **Merge:** MR is merged via GitLab API (squash, delete source branch).
 4. **Tag:** A tag is created on the base branch and pushed (triggers tag pipelines, e.g. Build/Deploy).
-5. **Release:** GitLab Release is created with description from `CHANGELOG/<version>.yml`.
+5. **Release:** GitLab Release is created with description from `.release-notes/<version>.yaml`, falling back to `CHANGELOG/<version>.yml`.
 
 **Required:** CI/CD variable `RELEASE_TOKEN` (masked) — GitLab token with `api` and `write_repository` (Personal or Project Access Token).
 
-**Optional variables:** `MERGE_RELEASE_CHANGELOG_PATH` (default: `CHANGELOG`), `MERGE_RELEASE_BASE_BRANCH` (default: `main`).
+**Optional variables:** `MERGE_RELEASE_NOTES_PATH` (default: `.release-notes`), `MERGE_RELEASE_CHANGELOG_PATH` (default: `CHANGELOG`), `MERGE_RELEASE_BASE_BRANCH` (default: `main`).
 
 Example: see [`examples/merge-and-release.gitlab-ci.yml`](examples/merge-and-release.gitlab-ci.yml).
+
+## Publish on a Release Tag
+
+**Build.gitlab-ci.yml** provides the `.prod_build_rules` anchor: a module that references it publishes automatically once a release tag exists, instead of asking for one click per edition.
+
+1. **`vX.Y.Z`** (exactly three numeric components — the shape `Merge_Release` creates): the prod build starts on its own.
+2. **Any other tag** (release candidate, hand-made, experimental): stays `when: manual`, so an ad-hoc tag never writes to the prod registry by itself.
+3. **Deploy jobs are untouched:** moving a release channel remains a separate manual decision.
+
+Usage in a project — the `needs` is what makes the release gates binding:
+
+```yaml
+build_prod:
+  stage: build
+  extends: [.build, .prod]
+  rules: !reference [.prod_build_rules, rules]
+  needs: ["Validate release notes"]
+  parallel:
+    matrix: *prod_build_matrix
+```
+
+Only for a module on the sectioned release-notes format: the gate job referenced by `needs` has to exist in the tag pipeline.
+
+## Validate Release Notes
+
+Template **Release_Notes.gitlab-ci.yml** validates the sectioned release notes of a module — a pair of locale files `.release-notes/<tag>.yaml` and `<tag>.ru.yaml` with `summary`, `highlights` and the optional `new_features`, `improvements`, `fixes`, `security`, `breaking`, `upgrade_notes`, `known_issues`, `docs` and `dependencies` sections.
+
+1. **Trigger:** tag pipelines, merge requests, and the default branch.
+2. **On a tag:** the pair of that tag must exist and pass validation.
+3. **Otherwise:** every pair in the directory is validated, so an edit that breaks an already-released file is caught too.
+
+The validator is embedded in the template: a module release depends on nothing but this repository and PyYAML.
+
+**Optional variables:** `RELEASE_NOTES_PATH` (default: `.release-notes`).
+
+Details: see [`docs/Release_Notes.gitlab-ci.md`](docs/Release_Notes.gitlab-ci.md).
 
 ## Translate Changelog and Create MR
 
