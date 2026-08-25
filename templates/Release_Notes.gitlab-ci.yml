@@ -1,0 +1,403 @@
+# Release notes: validation gate for the sectioned format.
+#
+# A release is described by a pair of locale files named after its git tag:
+#
+#   .release-notes/vX.Y.Z.yaml      English
+#   .release-notes/vX.Y.Z.ru.yaml   Russian
+#
+# with the sections `summary`, `highlights`, `new_features`, `improvements`, `fixes`,
+# `security`, `breaking`, `upgrade_notes`, `known_issues`, `docs` and `dependencies`.
+# `summary` and `highlights` are required in both locales; an empty section is deleted,
+# not left as `[]`. Version and module name come from the file name and `module.yaml`,
+# never from the document.
+#
+# WHY THIS GATE EXISTS
+#
+# The flat `Изменения:` / `Changes:` list it replaces carried no structure: a breaking
+# change, an upgrade note and a CI chore all looked the same, and `.changelog_validate`
+# could only check that the one list parsed. This validator checks what the sectioned
+# format promises the reader -- and the checks are the reason the format can be trusted
+# downstream, because the same YAML is what `.werf/release.yaml` merges into the
+# `changelog.yaml` of the release image, which DKP reads into `ModuleRelease.spec.changelog`
+# and Console renders. A section lost to a typo is invisible until a user looks for it.
+#
+# What is an error: a file that does not parse, a top level that is not a mapping, an
+# unknown or legacy key, a missing or empty `summary`/`highlights`, a section that is not a
+# list of non-empty strings, a dependency without a name, a `date` that is not a quoted
+# YYYY-MM-DD string, a non-boolean `skip_docs`, `skip_docs` disagreeing between the
+# locales, Cyrillic in the English file, no Cyrillic in the Russian `summary`/`highlights`,
+# and a pair with only one locale present.
+#
+# What is a warning: a section left as `[]` or null instead of being deleted, a section
+# present in one locale only, item counts that differ between the locales, and a `version`
+# or `module` key that duplicates what the file name already says.
+#
+# The tool is embedded here rather than fetched from another project so that a release of
+# any module depends on nothing but this repository and PyYAML.
+#
+# VARIABLES
+#
+#   RELEASE_NOTES_PATH   path to the release-notes directory, default `.release-notes`
+#
+# Usage in a project:
+#
+#   Validate release notes:
+#     extends: .release_notes_validate
+#
+# On a tag the pair of that tag must exist and be valid; on a merge request and on the
+# default branch every pair in the directory is validated, so an edit that breaks an
+# already-released file is caught too.
+
+# ---------------------------------------------------------------------------
+# Shared: the tool itself, written to disk by the job below.
+# ---------------------------------------------------------------------------
+.release_notes_tool_script: &release_notes_tool_script
+  - |
+    mkdir -p "${CI_PROJECT_DIR}/.release-notes-tool"
+    cat > "${CI_PROJECT_DIR}/.release-notes-tool/release_notes_tool.py" << 'RELEASE_NOTES_TOOL_PYEOF'
+    #!/usr/bin/env python3
+    # Copyright 2026 Flant JSC
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     http://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    """Validate sectioned release notes.
+
+        release_notes_tool.py validate [--all] [--tag vX.Y.Z] [--require-exists] [FILE ...]
+
+    A release is described by a pair of locale files named after its git tag:
+
+        <dir>/vX.Y.Z.yaml      English
+        <dir>/vX.Y.Z.ru.yaml   Russian
+
+    --all           validate every pair in the directory
+    --tag           validate the pair of that tag
+    --require-exists   fail when the named pair is absent (tag pipelines)
+    FILE ...        validate the pairs the named files belong to
+
+    Errors fail the run; warnings are printed and do not. Diagnostics go to stderr.
+    """
+
+    import os
+    import re
+    import sys
+    from pathlib import Path
+
+    try:
+        import yaml
+    except ImportError:  # pragma: no cover - the job installs it
+        print("PyYAML is required", file=sys.stderr)
+        raise SystemExit(1)
+
+    NOTES_DIR = Path(os.environ.get("RELEASE_NOTES_PATH", ".release-notes"))
+    FILE_NAME = re.compile(r"^(v\d+\.\d+\.\d+)(\.ru)?\.yaml$")
+    DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    CYRILLIC = re.compile(r"[Ѐ-ӿ]")
+
+    # The approved section list. Anything outside it is an error: a mistyped key would
+    # otherwise drop a whole section from the published notes without a word.
+    TEXT_LISTS = (
+        "highlights",
+        "new_features",
+        "improvements",
+        "fixes",
+        "security",
+        "breaking",
+        "upgrade_notes",
+        "known_issues",
+        "docs",
+    )
+    DEP_KEYS = ("name", "from", "to", "changelog_url", "notes")
+    ALLOWED = set(TEXT_LISTS) | {
+        "date",
+        "channels",
+        "summary",
+        "dependencies",
+        "skip_docs",
+        "version",
+        "module",
+    }
+
+
+    def parse(path):
+        """Return (document, errors)."""
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            return None, ["cannot be read: %s" % exc]
+        try:
+            doc = yaml.safe_load(text)
+        except Exception as exc:
+            return None, ["does not parse as YAML: %s" % str(exc).splitlines()[0]]
+        if doc is None:
+            return None, ["is empty"]
+        if not isinstance(doc, dict):
+            return None, ["top level is %s, expected a mapping" % type(doc).__name__]
+        return doc, []
+
+
+    def check_text_list(key, value):
+        errors = []
+        if not isinstance(value, list):
+            return ["%s is %s, expected a list" % (key, type(value).__name__)]
+        for i, item in enumerate(value, start=1):
+            if not isinstance(item, str):
+                errors.append(
+                    "%s item %d is %s, expected a string: %s"
+                    % (key, i, type(item).__name__, str(item)[:120])
+                )
+            elif not item.strip():
+                errors.append("%s item %d is blank" % (key, i))
+        return errors
+
+
+    def check_dependencies(value):
+        errors = []
+        if not isinstance(value, list):
+            return ["dependencies is %s, expected a list" % type(value).__name__]
+        for i, item in enumerate(value, start=1):
+            if not isinstance(item, dict):
+                errors.append("dependencies item %d is %s, expected a mapping" % (i, type(item).__name__))
+                continue
+            unknown = sorted(set(item) - set(DEP_KEYS))
+            if unknown:
+                errors.append("dependencies item %d has unknown keys: %s" % (i, ", ".join(map(str, unknown))))
+            if not str(item.get("name", "")).strip():
+                errors.append("dependencies item %d has no name" % i)
+            for k, v in item.items():
+                if k in DEP_KEYS and not isinstance(v, str):
+                    errors.append("dependencies item %d: %s is %s, expected a string" % (i, k, type(v).__name__))
+        return errors
+
+
+    def validate_file(path, lang):
+        """Return (document, errors, warnings) for one locale file."""
+        doc, errors = parse(path)
+        if doc is None:
+            return None, errors, []
+        warnings = []
+
+        legacy_keys = [k for k in ("Changes", "Изменения") if k in doc]
+        for legacy in legacy_keys:
+            errors.append(
+                "holds the legacy %r key: this is the sectioned format, not a flat changelog" % legacy
+            )
+
+        unknown = sorted(set(doc) - ALLOWED - set(legacy_keys))
+        if unknown:
+            errors.append("unknown keys: %s" % ", ".join(map(str, unknown)))
+
+        summary = doc.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            errors.append("summary is required and must be a non-empty string")
+
+        highlights = doc.get("highlights")
+        if not isinstance(highlights, list) or not highlights:
+            errors.append("highlights is required and must hold at least one item")
+        else:
+            errors.extend(check_text_list("highlights", highlights))
+
+        for key in TEXT_LISTS:
+            if key == "highlights" or key not in doc:
+                continue
+            if doc[key] is None:
+                warnings.append("%s is null: delete the key instead of leaving it empty" % key)
+                continue
+            errors.extend(check_text_list(key, doc[key]))
+            if isinstance(doc[key], list) and not doc[key]:
+                warnings.append("%s is an empty list: delete the key instead" % key)
+
+        if "dependencies" in doc and doc["dependencies"] is not None:
+            errors.extend(check_dependencies(doc["dependencies"]))
+
+        if "date" in doc:
+            if not isinstance(doc["date"], str) or not DATE.match(doc["date"]):
+                errors.append("date must be a quoted YYYY-MM-DD string, got %r" % (doc["date"],))
+
+        if "channels" in doc and doc["channels"] is not None:
+            errors.extend(check_text_list("channels", doc["channels"]))
+
+        if "skip_docs" in doc and not isinstance(doc["skip_docs"], bool):
+            errors.append("skip_docs must be true or false, got %r" % (doc["skip_docs"],))
+
+        for redundant in ("version", "module"):
+            if redundant in doc:
+                warnings.append("%s is taken from the file name and module.yaml; drop this key" % redundant)
+
+        text = yaml.safe_dump(doc, allow_unicode=True)
+        if lang == "en" and CYRILLIC.search(text):
+            errors.append("holds Cyrillic: the English file was never written in English")
+        if lang == "ru":
+            ru_text = " ".join(
+                [str(doc.get("summary") or "")] + [str(i) for i in (doc.get("highlights") or [])]
+            )
+            if not CYRILLIC.search(ru_text):
+                errors.append("summary and highlights hold no Cyrillic: is this really the Russian file?")
+
+        return doc, errors, warnings
+
+
+    def validate_pair(tag, require_exists):
+        """Return (errors, warnings) for one tag."""
+        en_path = NOTES_DIR / ("%s.yaml" % tag)
+        ru_path = NOTES_DIR / ("%s.ru.yaml" % tag)
+        errors, warnings = [], []
+
+        missing = [p for p in (en_path, ru_path) if not p.exists()]
+        if missing:
+            message = "missing: %s" % ", ".join(str(p) for p in missing)
+            if require_exists or len(missing) == 1:
+                return ["%s: %s" % (tag, message)], warnings
+            print("skip  %s: %s" % (tag, message), file=sys.stderr)
+            return errors, warnings
+
+        docs = {}
+        for path, lang in ((en_path, "en"), (ru_path, "ru")):
+            doc, file_errors, file_warnings = validate_file(path, lang)
+            docs[lang] = doc
+            errors.extend("%s: %s" % (path, e) for e in file_errors)
+            warnings.extend("%s: %s" % (path, w) for w in file_warnings)
+
+        en, ru = docs.get("en"), docs.get("ru")
+        if en is not None and ru is not None:
+            if bool(en.get("skip_docs")) != bool(ru.get("skip_docs")):
+                errors.append("%s: skip_docs differs between the locales" % tag)
+            for key in TEXT_LISTS:
+                en_items, ru_items = en.get(key), ru.get(key)
+                if isinstance(en_items, list) and isinstance(ru_items, list) and len(en_items) != len(ru_items):
+                    warnings.append(
+                        "%s: %s holds %d items in English and %d in Russian"
+                        % (tag, key, len(en_items), len(ru_items))
+                    )
+                elif (key in en) != (key in ru):
+                    warnings.append("%s: %s is present in only one locale" % (tag, key))
+
+        return errors, warnings
+
+
+    def tags_in_dir():
+        if not NOTES_DIR.is_dir():
+            return []
+        tags = set()
+        for entry in NOTES_DIR.iterdir():
+            m = FILE_NAME.match(entry.name)
+            if m:
+                tags.add(m.group(1))
+        return sorted(tags, key=lambda t: tuple(int(p) for p in t.lstrip("v").split(".")))
+
+
+    def cmd_validate(argv):
+        require_exists = "--require-exists" in argv
+        validate_all = "--all" in argv
+
+        tags, listed = [], []
+        i = 0
+        while i < len(argv):
+            arg = argv[i]
+            if arg == "--tag" and i + 1 < len(argv):
+                tags.append(argv[i + 1])
+                i += 2
+                continue
+            if not arg.startswith("--"):
+                listed.append(arg)
+            i += 1
+
+        for name in listed:
+            m = FILE_NAME.match(Path(name).name)
+            if m:
+                tags.append(m.group(1))
+            else:
+                print("skip  %s: not a versioned release-notes file" % name, file=sys.stderr)
+
+        if validate_all:
+            tags.extend(tags_in_dir())
+
+        tags = sorted(set(tags), key=lambda t: tuple(int(p) for p in t.lstrip("v").split(".")))
+        if not tags:
+            print("No release notes in scope, nothing to validate.", file=sys.stderr)
+            return 0
+
+        total_errors = 0
+        for tag in tags:
+            errors, warnings = validate_pair(tag, require_exists)
+            for w in warnings:
+                print("WARN  %s" % w, file=sys.stderr)
+            for e in errors:
+                print("ERROR %s" % e, file=sys.stderr)
+            if not errors:
+                print("ok    %s" % tag, file=sys.stderr)
+            total_errors += len(errors)
+
+        if total_errors:
+            print("\n%d error(s) in the release notes." % total_errors, file=sys.stderr)
+            return 1
+        return 0
+
+
+    def main(argv):
+        if not argv or argv[0] != "validate":
+            print(__doc__, file=sys.stderr)
+            return 2
+        return cmd_validate(argv[1:])
+
+
+    if __name__ == "__main__":
+        raise SystemExit(main(sys.argv[1:]))
+    RELEASE_NOTES_TOOL_PYEOF
+
+.release_notes_python_env: &release_notes_python_env
+  - |
+    set -e
+    missing=""
+    for bin in git python3; do
+      command -v "$bin" >/dev/null 2>&1 || missing="$missing $bin"
+    done
+    if [ -n "$missing" ]; then
+      if [ "$(id -u)" = "0" ]; then
+        apt-get update -qq && apt-get install -y -qq $missing
+      else
+        echo "Missing required tools:$missing. Install them on the runner host (shell executor has no root)." >&2
+        exit 1
+      fi
+    fi
+    python3 -m venv /tmp/venv-release-notes
+    /tmp/venv-release-notes/bin/pip install --no-cache-dir PyYAML
+
+# ---------------------------------------------------------------------------
+# Validation gate
+# ---------------------------------------------------------------------------
+.release_notes_validate:
+  stage: pre
+  image:
+    name: python:3.11-slim
+    entrypoint: [""]
+  variables:
+    RELEASE_NOTES_PATH: ".release-notes"
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - *release_notes_python_env
+    - *release_notes_tool_script
+  script:
+    - |
+      set -euo pipefail
+      export PATH="/tmp/venv-release-notes/bin:$PATH"
+      TOOL="${CI_PROJECT_DIR}/.release-notes-tool/release_notes_tool.py"
+      cd "${CI_PROJECT_DIR}"
+      if [ -n "${CI_COMMIT_TAG:-}" ]; then
+        # A tag must carry its own pair: this is the last point before the release image is
+        # built, and the build refuses to publish a release tag without release notes.
+        python3 "$TOOL" validate --tag "${CI_COMMIT_TAG}" --require-exists
+      else
+        python3 "$TOOL" validate --all
+      fi

@@ -38,13 +38,27 @@ Template **Merge_Release.gitlab-ci.yml** implements the same flow as [modules-ac
 2. **Version:** Extracted from MR title (e.g. `v0.3.17` or `0.3.17`).
 3. **Merge:** MR is merged via GitLab API (squash, delete source branch).
 4. **Tag:** A tag is created on the base branch and pushed (triggers tag pipelines, e.g. Build/Deploy).
-5. **Release:** GitLab Release is created with description from `CHANGELOG/<version>.yml`.
+5. **Release:** GitLab Release is created with description from `.release-notes/<version>.yaml`, falling back to `CHANGELOG/<version>.yml`.
 
 **Required:** CI/CD variable `RELEASE_TOKEN` (masked) — GitLab token with `api` and `write_repository` (Personal or Project Access Token).
 
-**Optional variables:** `MERGE_RELEASE_CHANGELOG_PATH` (default: `CHANGELOG`), `MERGE_RELEASE_BASE_BRANCH` (default: `main`).
+**Optional variables:** `MERGE_RELEASE_NOTES_PATH` (default: `.release-notes`), `MERGE_RELEASE_CHANGELOG_PATH` (default: `CHANGELOG`), `MERGE_RELEASE_BASE_BRANCH` (default: `main`).
 
 Example: see [`examples/merge-and-release.gitlab-ci.yml`](examples/merge-and-release.gitlab-ci.yml).
+
+## Validate Release Notes
+
+Template **Release_Notes.gitlab-ci.yml** validates the sectioned release notes of a module — a pair of locale files `.release-notes/<tag>.yaml` and `<tag>.ru.yaml` with `summary`, `highlights` and the optional `new_features`, `improvements`, `fixes`, `security`, `breaking`, `upgrade_notes`, `known_issues`, `docs` and `dependencies` sections.
+
+1. **Trigger:** tag pipelines, merge requests, and the default branch.
+2. **On a tag:** the pair of that tag must exist and pass validation.
+3. **Otherwise:** every pair in the directory is validated, so an edit that breaks an already-released file is caught too.
+
+The validator is embedded in the template: a module release depends on nothing but this repository and PyYAML.
+
+**Optional variables:** `RELEASE_NOTES_PATH` (default: `.release-notes`).
+
+Details: see [`docs/Release_Notes.gitlab-ci.md`](docs/Release_Notes.gitlab-ci.md).
 
 ## Translate Changelog and Create MR
 
