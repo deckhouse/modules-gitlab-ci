@@ -69,3 +69,19 @@ variables:
 
 `Merge_Release.gitlab-ci.yml` looks up `.release-notes/<version>.yaml` first and falls back
 to `CHANGELOG/<version>.yml`, so the GitLab Release description works in both formats.
+
+## Making the gate binding
+
+By itself this job only turns a tag pipeline red: on a tag every other job is normally
+`when: manual`, so the prod build stays clickable. Reference `.prod_build_rules` from
+`Build.gitlab-ci.yml` and point `needs` at this job, and invalid release notes stop the
+publication instead:
+
+```yaml
+build_prod:
+  extends: [.build, .prod]
+  rules: !reference [.prod_build_rules, rules]
+  needs: ["Validate release notes"]
+```
+
+The job name in `needs` has to match the name the module gave this template's job.
