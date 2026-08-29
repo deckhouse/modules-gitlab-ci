@@ -67,6 +67,29 @@
 #              E2E_COMMANDER_WAIT_TIMEOUT, E2E_COMMANDER_BOOTSTRAP_ATTEMPTS,
 #              E2E_COMMANDER_DELETE_WAIT_TIMEOUT, E2E_COMMANDER_SSH_JUMP_*, GOPROXY
 #
+# Block devices on a Commander cluster (optional)
+# --------------------------------------------------------------------------
+# Commander hands out a cluster, not the infrastructure under it, so by default a
+# suite gets no disks to attach: cl.Disks() reports ErrDisksUnsupported and specs
+# that need a real block device skip. The cluster template builds the cluster out
+# of DVP VirtualMachines, though, so the kubeconfig of that DVP -- the one
+# Commander itself is configured with -- is all storage-e2e needs to create a
+# VirtualDisk and attach it to a node, exactly as the dvp provider does:
+#
+#   E2E_COMMANDER_INFRA_KUBECONFIG_B64   base64 kubeconfig of the DVP cluster
+#                                        hosting the VMs (decoded below)
+#   E2E_COMMANDER_INFRA_NAMESPACE        namespace holding them; when unset it is
+#                                        discovered from the VMs' cluster-prefix
+#                                        label, which needs cluster-wide list
+#                                        permission -- name it for a kubeconfig
+#                                        bound to a single namespace
+#   E2E_COMMANDER_INFRA_STORAGE_CLASS    StorageClass for the created disks
+#                                        (default: the infra cluster's default)
+#
+# Teardown sweeps the disks it created (they outlive the cluster, and an
+# attachment still bound to a VM blocks that VM's deletion), so no extra job is
+# needed. Leave the variables unset and the pipeline behaves exactly as before.
+#
 # A bootstrap Commander reports as creation_failed is terminal: it never retries
 # the task, and the cluster keeps that status until somebody deletes it. So the
 # provider discards such a cluster and builds a new one, up to
@@ -85,6 +108,7 @@
 # (encode with `base64 -w0`) and decoded automatically:
 #   E2E_COMMANDER_SSH_PRIVATE_KEY_B64        (required)
 #   E2E_COMMANDER_SSH_JUMP_PRIVATE_KEY_B64   (optional, bastion)
+#   E2E_COMMANDER_INFRA_KUBECONFIG_B64       (optional, block devices)
 #   E2E_COMMANDER_CA_CERT_B64                (optional; decoded to a file since
 #                                            E2E_COMMANDER_CA_CERT is a path)
 # The raw E2E_COMMANDER_SSH_PRIVATE_KEY (content) / E2E_COMMANDER_CA_CERT (path)
@@ -221,6 +245,10 @@ variables:
       }
       decode_b64 E2E_COMMANDER_SSH_PRIVATE_KEY "${E2E_COMMANDER_SSH_PRIVATE_KEY_B64:-}"
       decode_b64 E2E_COMMANDER_SSH_JUMP_PRIVATE_KEY "${E2E_COMMANDER_SSH_JUMP_PRIVATE_KEY_B64:-}"
+      # The kubeconfig of the infrastructure the Commander cluster runs on, which
+      # is what gives the suite block devices (see the header). Consumed as inline
+      # CONTENT like the keys above.
+      decode_b64 E2E_COMMANDER_INFRA_KUBECONFIG "${E2E_COMMANDER_INFRA_KUBECONFIG_B64:-}"
       # E2E_COMMANDER_CA_CERT is a FILE PATH (storage-e2e os.ReadFile), so decode
       # the base64 cert to a file and point the var at it. Only when pinning a CA;
       # with E2E_COMMANDER_INSECURE_SKIP_TLS_VERIFY=true no CA is needed at all.
