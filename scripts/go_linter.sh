@@ -34,9 +34,31 @@ section_end() {
     fi
 }
 
-linter_version="v2.9.0"
-section_start "install_linter" "Installing golangci-lint@$linter_version"
-curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b . $linter_version
+# Built here rather than downloaded, for two reasons. golangci-lint refuses a
+# target newer than the Go it was built with, and a released binary carries
+# whatever Go upstream happened to use — so a pin has to be chased every time
+# base-images moves the fleet's Go. And upstream's install.sh greps the checksums
+# file for the file name without anchoring the match, so since v2.13 started
+# shipping an SBOM it compares the tarball against the ".tar.gz.sbom.json" hash
+# and every download "fails" verification. Building from the module proxy checks
+# integrity through golangci-lint's own go.sum, with the newest toolchain any
+# module here asks for.
+linter_version="v2.13.2"
+
+linter_toolchain=$(
+    find . -mindepth 1 \( -name '.*' -o -name '_*' \) -prune -o -type f -name go.mod -print |
+        xargs -r awk '$1 == "go" && $2 ~ /^[0-9]+\.[0-9]+(\.[0-9]+)?$/ {print $2}' |
+        sort -V | tail -1
+)
+case "$linter_toolchain" in
+    '')    linter_toolchain=auto ;;
+    *.*.*) linter_toolchain="go$linter_toolchain" ;;
+    *)     linter_toolchain="go${linter_toolchain}.0" ;;
+esac
+
+section_start "install_linter" "Installing golangci-lint@$linter_version (GOTOOLCHAIN=$linter_toolchain)"
+GOTOOLCHAIN="$linter_toolchain" GOBIN="$(pwd)" \
+    go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$linter_version"
 section_end "install_linter"
 
 # Migrate .golangci config to v2 format if needed (golangci-lint v2 requires version: "2")
