@@ -50,7 +50,13 @@
         fi
       }
 
-      linter_version="v2.9.0"
+      # golangci-lint refuses a target newer than the Go it was built with
+      # ("the Go language version (go1.26) used to build golangci-lint is lower
+      # than the targeted Go version (1.27.0)"), so this pin has to keep up with
+      # the modules: base-images v2.1.7 moved them to go 1.27.0 and every
+      # go_linter job in the fleet has been failing since. v2.13.2 is built with
+      # go1.27.0.
+      linter_version="v2.13.2"
       section_start "install_linter" "Installing golangci-lint@$linter_version"
       curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b . $linter_version
       section_end "install_linter"
