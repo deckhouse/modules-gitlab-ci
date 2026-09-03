@@ -183,17 +183,29 @@ gitleaks_diff:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
-gitleaks_full_manual:
+# A full scan runs `git log -p --all`, so it walks every ref present in the build
+# directory -- and shell runners reuse that directory between pipelines. Refs left there
+# by earlier jobs (refs/merge-requests/*, tips of branches since force-pushed) keep
+# commits alive that the project itself no longer references, and the scan then fails on
+# secrets no clone of the repository contains. Seen in deckhouse/storage: two modules
+# failed this job on commits that /repository/commits/<sha>/refs reports as belonging to
+# no branch, tag or merge request, while a fresh checkout of the same repository reported
+# nothing. GIT_STRATEGY: clone discards the directory first, so the scan sees the
+# repository rather than the runner's accumulated history. Only the full scans need it;
+# gitleaks_diff looks at one merge request range and stays on the default fetch.
+.gitleaks_full_scan:
   extends: .gitleaks_scan
   variables:
     SCAN_MODE: "full"
+    GIT_STRATEGY: clone
+
+gitleaks_full_manual:
+  extends: .gitleaks_full_scan
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
 
 gitleaks_full_scheduled:
-  extends: .gitleaks_scan
-  variables:
-    SCAN_MODE: "full"
+  extends: .gitleaks_full_scan
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
 
