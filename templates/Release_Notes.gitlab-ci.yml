@@ -435,12 +435,17 @@
     RELEASE_NOTES_PATH: ".release-notes"
     RELEASE_NOTES_BASE_BRANCH: "main"
   rules:
-    # The tag guard matters for the same reason it does in .translate_and_create_mr: on a
-    # tag pipeline CI_COMMIT_BRANCH is empty, so the branch condition alone is true there,
-    # and the job would try to open a merge request from a tag.
+    # This job belongs to BRANCH pipelines only, and the conditions have to say so
+    # explicitly. GitLab evaluates an unset variable as an empty string, so
+    # `$CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH` is TRUE wherever CI_COMMIT_BRANCH does not
+    # exist -- on a tag pipeline and, less obviously, on a merge request pipeline. Both
+    # would start the job with no branch to open a merge request from, and the merge
+    # request pipeline is the one place where the merge request already exists.
     - if: $CI_COMMIT_TAG
       when: never
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   before_script:
     - *release_notes_python_env
     - *release_notes_tool_script
@@ -450,6 +455,17 @@
       export PATH="/tmp/venv-release-notes/bin:$PATH"
       TOOL="${CI_PROJECT_DIR}/.release-notes-tool/release_notes_tool.py"
       cd "${CI_PROJECT_DIR}"
+
+      # The rules above keep this job on branch pipelines, where CI_COMMIT_BRANCH is set.
+      # The fallback and the guard are here so that a project which loosens those rules
+      # gets a clear message instead of a traceback out of the Python below.
+      BRANCH="${CI_COMMIT_BRANCH:-${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME:-}}"
+      if [ -z "$BRANCH" ]; then
+        echo "Neither CI_COMMIT_BRANCH nor CI_MERGE_REQUEST_SOURCE_BRANCH_NAME is set:" >&2
+        echo "this job only makes sense on a branch pipeline." >&2
+        exit 1
+      fi
+      export RELEASE_NOTES_BRANCH="$BRANCH"
 
       # Which version does this push describe? The files touched by HEAD answer it exactly,
       # which is the normal case: the release commit adds the pair and nothing else. A push
@@ -469,7 +485,7 @@
           | sed -E 's#.*/(v[0-9]+\.[0-9]+\.[0-9]+)(\.ru)?\.yaml$#\1#' \
           | sort -uV | tail -1)
       else
-        BRANCH_VERSION=$(printf '%s' "${CI_COMMIT_BRANCH}" \
+        BRANCH_VERSION=$(printf '%s' "${BRANCH}" \
           | grep -oE 'v[0-9]+[.-][0-9]+[.-][0-9]+' | head -1 | tr '-' '.' || true)
         if [ -n "$BRANCH_VERSION" ] && [ -f "${RELEASE_NOTES_PATH}/${BRANCH_VERSION}.yaml" ]; then
           echo "No release notes in this commit; taking ${BRANCH_VERSION} from the branch name."
@@ -498,7 +514,7 @@
 
       api = os.environ["CI_API_V4_URL"]
       project = urllib.parse.quote(os.environ["CI_PROJECT_ID"], safe="")
-      source = os.environ["CI_COMMIT_BRANCH"]
+      source = os.environ["RELEASE_NOTES_BRANCH"]
       target = os.environ.get("RELEASE_NOTES_BASE_BRANCH") or "main"
       version = os.environ["RELEASE_NOTES_VERSION"]
       notes_dir = os.environ.get("RELEASE_NOTES_PATH") or ".release-notes"
