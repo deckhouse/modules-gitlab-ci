@@ -40,6 +40,11 @@ repository and PyYAML.
 ### Optional
 
 - `RELEASE_NOTES_PATH` — release-notes directory, default `.release-notes`.
+- `RELEASE_NOTES_BASE_BRANCH` — target branch of the release MR, default `main`
+  (`.release_notes_create_mr` only).
+- `RELEASE_TOKEN` — token with the `api` scope, used to create the release MR. `CI_JOB_TOKEN`
+  is used when unset, but it cannot create a merge request: the job says so and fails
+  (`.release_notes_create_mr` only).
 
 ## Usage
 
@@ -52,6 +57,9 @@ include:
 
 Validate release notes:
   extends: .release_notes_validate
+
+Create release MR:
+  extends: .release_notes_create_mr
 ```
 
 On a tag the pair of that tag must exist and be valid. On a merge request and on the
@@ -61,11 +69,17 @@ already-released file is caught too.
 A module that has moved to this format also wants:
 
 ```yaml
-variables:
-  # `CHANGELOG/` keeps the history of the releases cut before the move and gains no new
-  # files, so the legacy validator must stop demanding a file there on a tag.
-  CHANGELOG_REQUIRE_ON_TAG: "false"
+Validate changelog:
+  extends: .changelog_validate
+  variables:
+    # `CHANGELOG/` keeps the history of the releases cut before the move and gains no new
+    # files, so the legacy validator must stop demanding a file there on a tag.
+    CHANGELOG_REQUIRE_ON_TAG: "false"
 ```
+
+That variable has to sit in the job, not in the global `variables:` block:
+`.changelog_validate` declares it job-level with the default `"true"`, and a job-level
+variable wins over a global one — setting it globally looks right and does nothing.
 
 `Merge_Release.gitlab-ci.yml` looks up `.release-notes/<version>.yaml` first and falls back
 to `CHANGELOG/<version>.yml`, so the GitLab Release description works in both formats.
@@ -85,3 +99,30 @@ build_prod:
 ```
 
 The job name in `needs` has to match the name the module gave this template's job.
+
+## The release MR
+
+`.release_notes_create_mr` opens the merge request of a release. It runs on a push to a
+non-default branch, works out which version the push describes, validates that version's
+pair and creates the MR:
+
+- **the version** comes from the release-notes files touched by the pushed commit; when the
+  commit touches none of them it falls back to the version in the branch name
+  (`v0-1-24-changelog`), so a follow-up push still opens the MR that the first push failed
+  to open;
+- **the title** is `Release vX.Y.Z`. The version has to be in the title because
+  `.merge_and_release` greps it from there;
+- **the description** carries both locale files, and the two steps that are left to a human:
+  the `release` label and a pipeline rerun;
+- **already open?** The job finds the open MR for the same source and target branch and
+  exits without creating a second one, so re-pushing the branch is safe;
+- **invalid notes?** The job fails and creates nothing — an MR titled `Release vX.Y.Z` must
+  not carry notes the release image would refuse to ship.
+
+The job never merges, never tags and never sets a label: putting `release` on the MR and
+rerunning its pipeline stays the human gesture that cuts the release.
+
+It exists because this format has no translation step. In the flat `CHANGELOG/` format the
+English file was machine-translated by `.translate_and_create_mr`, and that job opened the
+MR as a side effect; here both locales are written by the author, so nothing was left to
+open it.

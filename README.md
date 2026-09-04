@@ -82,6 +82,26 @@ The validator is embedded in the template: a module release depends on nothing b
 
 Details: see [`docs/Release_Notes.gitlab-ci.md`](docs/Release_Notes.gitlab-ci.md).
 
+## Create Release MR
+
+The same template carries **`.release_notes_create_mr`**, which opens the merge request of a
+release — the sectioned format has no translation step, so nothing else did.
+
+1. **Trigger:** a push to a non-default branch (never a tag).
+2. **Version:** from the release-notes files the commit touched, falling back to the version in
+   the branch name (`v0-1-24-changelog`).
+3. **Validation:** that version's pair must be valid, or the job fails and creates nothing.
+4. **MR:** titled `Release vX.Y.Z` (where `Merge and Release` reads the version from), described
+   with both locale files, idempotent — an already open MR for the branch is left alone.
+
+It never merges, tags or labels: `release` on the MR plus a pipeline rerun stays a human
+decision.
+
+**Required:** CI/CD variable `RELEASE_TOKEN` (`api` scope) — `CI_JOB_TOKEN` cannot create a merge
+request.
+
+**Optional variables:** `RELEASE_NOTES_BASE_BRANCH` (default: `main`).
+
 ## Translate Changelog and Create MR
 
 Template **Translate_Changelog.gitlab-ci.yml** implements the same flow as [modules-actions translate-changelog](https://github.com/deckhouse/modules-actions/tree/main/translate-changelog) (PR [#57](https://github.com/deckhouse/modules-actions/pull/57)):
