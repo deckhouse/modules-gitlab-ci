@@ -2,7 +2,7 @@
 #
 # 1. Add label "release" or "ready-for-release" to your Merge Request.
 # 2. Run the pipeline (or re-run after adding the label).
-# 3. Job merges MR (squash, delete source branch), creates tag from MR title version (e.g. v0.3.17),
+# 3. Job merges MR (merge commit, delete source branch), creates tag from MR title version (e.g. v0.3.17),
 #    pushes tag, creates GitLab Release with changelog from CHANGELOG/<version>.yml.
 #
 # Required CI/CD variable (masked): RELEASE_TOKEN — GitLab token with api, write_repository
