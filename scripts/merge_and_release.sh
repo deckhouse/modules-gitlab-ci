@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 # Merge MR and Create Release — GitLab analogue of modules-actions merge-and-release.
-# Merges a Merge Request (squash, delete branch), creates a tag, pushes it, creates GitLab Release with changelog.
+# Merges a Merge Request (merge commit, delete branch), creates a tag, pushes it, creates GitLab Release with changelog.
 
 set -euo pipefail
 
@@ -41,12 +41,12 @@ if [[ ! "$VERSION" =~ ^v ]]; then
 fi
 echo "Extracted version: $VERSION"
 
-# --- Merge MR via GitLab API (squash, remove source branch)
-echo "Merging MR !${MR_IID} (squash, delete source branch)..."
+# --- Merge MR via GitLab API (merge commit, remove source branch)
+echo "Merging MR !${MR_IID} (merge commit, delete source branch)..."
 MERGE_RESPONSE=$(curl -s -w "\n%{http_code}" --request PUT \
   --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
   --header "Content-Type: application/json" \
-  "${API_URL}/projects/${PROJECT_ID}/merge_requests/${MR_IID}/merge?squash=true&should_remove_source_branch=true")
+  "${API_URL}/projects/${PROJECT_ID}/merge_requests/${MR_IID}/merge?squash=false&should_remove_source_branch=true")
 HTTP_BODY=$(echo "$MERGE_RESPONSE" | head -n -1)
 HTTP_CODE=$(echo "$MERGE_RESPONSE" | tail -n 1)
 if [ "$HTTP_CODE" != "200" ]; then

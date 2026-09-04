@@ -6,7 +6,7 @@ This template implements the same flow as [modules-actions merge-and-release](ht
 
 1. **Trigger:** Add label `release` or `ready-for-release` to a Merge Request and run the pipeline (or re-run after adding the label).
 2. **Version:** Extracted from the MR title (e.g. `v0.3.17` or `0.3.17`).
-3. **Merge:** MR is merged via GitLab API (squash, delete source branch).
+3. **Merge:** MR is merged via GitLab API (merge commit, delete source branch).
 4. **Tag:** A tag is created on the base branch and pushed (this triggers tag pipelines, e.g. Build/Deploy).
 5. **Release:** GitLab Release is created with description from `CHANGELOG/<version>.yml`.
 

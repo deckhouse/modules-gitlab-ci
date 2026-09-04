@@ -54,10 +54,15 @@
       [ -n "$VERSION" ] || { echo "Error: Could not extract version from MR title: $PR_TITLE"; exit 1; }
       [[ "$VERSION" =~ ^v ]] || VERSION="v${VERSION}"
       echo "Extracted version: $VERSION"
-      # Merge MR (squash, delete source branch)
+      # Merge MR (merge commit, delete source branch). `squash=false` is passed
+      # explicitly: with the parameter omitted GitLab falls back to the MR's own squash
+      # flag, which a project configured to squash by default sets for every MR, so the
+      # release commit would be collapsed anyway. A project whose "Squash commits when
+      # merging" setting is "Require" rejects the call -- relax the setting there, the
+      # history of a release branch is meant to survive the merge.
       curl -s --request PUT \
         --header "PRIVATE-TOKEN: ${RELEASE_TOKEN:-$CI_JOB_TOKEN}" \
-        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/merge?squash=true&should_remove_source_branch=true" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/merge?squash=false&should_remove_source_branch=true" \
         | jq -e .id >/dev/null || { echo "Merge failed"; exit 1; }
       echo "MR merged successfully."
       sleep 10
