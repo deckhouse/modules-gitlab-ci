@@ -89,7 +89,7 @@
       # nothing to do with the scan.
       cve_scripts_dir=$(mktemp -d -t cve-scripts.XXXXXXXX)
       git clone --depth 1 --branch v2.0 "$CVE_TEST_REPO_GIT" "$cve_scripts_dir"
-      cp "$cve_scripts_dir"/*.sh "$cve_scripts_dir"/*.py .
+      cp -r "$cve_scripts_dir"/*.sh "$cve_scripts_dir"/*.py "$cve_scripts_dir"/lib .
       rm -rf "$cve_scripts_dir"
       chmod +x *.sh *.py
       echo "Scripts copied to current directory"
