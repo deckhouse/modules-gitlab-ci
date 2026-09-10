@@ -83,7 +83,7 @@
       echo "Cloning cve-scripts repository"
       rm -rf /tmp/cve-scripts
       git clone --depth 1 --branch v1.0 "$CVE_TEST_REPO_GIT" /tmp/cve-scripts
-      cp /tmp/cve-scripts/*.sh /tmp/cve-scripts/*.py .
+      cp -r /tmp/cve-scripts/*.sh /tmp/cve-scripts/*.py /tmp/cve-scripts/lib .
       chmod +x *.sh *.py
       echo "Scripts copied to current directory"
   script:
