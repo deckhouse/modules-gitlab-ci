@@ -89,10 +89,26 @@
       # nothing to do with the scan.
       cve_scripts_dir=$(mktemp -d -t cve-scripts.XXXXXXXX)
       git clone --depth 1 --branch v2.0 "$CVE_TEST_REPO_GIT" "$cve_scripts_dir"
-      cp "$cve_scripts_dir"/*.sh "$cve_scripts_dir"/*.py .
-      rm -rf "$cve_scripts_dir"
-      chmod +x *.sh *.py
-      echo "Scripts copied to current directory"
+      chmod +x "$cve_scripts_dir"/*.sh "$cve_scripts_dir"/*.py
+      echo "Scripts cloned into ${cve_scripts_dir}"
+      # Run from the clone rather than copying the scripts out of it. The copy was
+      # "$cve_scripts_dir"/*.sh "$cve_scripts_dir"/*.py, which takes the loose
+      # files and no directories -- so when cve_scan.sh grew a lib/ of its own
+      # (cve-scan v2.0, 2026-09-10) it arrived without the five files it sources
+      # and died on its first line of work:
+      #
+      #   ./cve_scan.sh: line 10: .../lib/log.sh: No such file or directory
+      #
+      # Every module's scan failed that way from the minute that landed, and
+      # silently, because this job is allow_failure. Widening the copy would have
+      # fixed that one directory and broken again on the next; copying the whole
+      # clone would drop its .gitignore and .gitlab-ci.yml into the module's
+      # working tree. The scripts are already built to be run where they live --
+      # cve_scan.sh resolves lib/ and its python helpers through CS_SCRIPT_DIR,
+      # taken from BASH_SOURCE -- and CS_WORKDIR is absolute, so nothing depends
+      # on the working directory. Not copying also stops leaving cve_scan.sh,
+      # process_digest.py and send_report.py behind in the checkout, which the
+      # next pipeline on the same shell runner then had to clean.
   script:
     - |
       export CS_SOURCE_TAG
@@ -127,4 +143,10 @@
 
       echo "Running cve_scan.sh"
 
-      ./cve_scan.sh
+      # The clone has to outlive the scan now, so it is removed after it instead
+      # of before it. `|| rc=$?` rather than a bare call: set -e is on, and the
+      # job has to report the scan's own status, not the status of the cleanup.
+      scan_rc=0
+      "$cve_scripts_dir"/cve_scan.sh || scan_rc=$?
+      rm -rf "$cve_scripts_dir"
+      exit "$scan_rc"
