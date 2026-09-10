@@ -63,7 +63,7 @@
       echo "dev fuzz build: local primary, secondary cache ${WERF_SECONDARY_REPO_1} (no push, no build-report upload)"
       echo "Corpus replay path prefix: anomaloys-materials/${FUZZ_S3_REPOSITORY}/${FUZZ_S3_BRANCH_SLUG}/"
 
-      FUZZ_IMAGES="$(werf config list | grep -- '-fuzz$' || true)"
+      FUZZ_IMAGES="$(werf config list --final-images-only=false | grep -- '-fuzz$' || true)"
       if [[ -z "${FUZZ_IMAGES}" ]]; then
         echo "No fuzz images found"
         exit 1
@@ -74,6 +74,7 @@
 
       # shellcheck disable=SC2086
       werf build ${FUZZ_IMAGES} \
+        --final-images-only=false \
         --parallel=true --parallel-tasks-limit=10 \
         --save-build-report=true \
         --build-report-path images_fuzz_tags_werf.json
@@ -104,7 +105,7 @@
       echo "main fuzz build: push to ${WERF_REPO}"
       echo "Corpus replay path prefix: anomaloys-materials/${FUZZ_S3_REPOSITORY}/${FUZZ_S3_BRANCH_SLUG}/"
 
-      FUZZ_IMAGES="$(werf config list | grep -- '-fuzz$' || true)"
+      FUZZ_IMAGES="$(werf config list --final-images-only=false | grep -- '-fuzz$' || true)"
       if [[ -z "${FUZZ_IMAGES}" ]]; then
         echo "No fuzz images found"
         exit 1
@@ -115,6 +116,7 @@
 
       # shellcheck disable=SC2086
       werf build ${FUZZ_IMAGES} \
+        --final-images-only=false \
         --parallel=true --parallel-tasks-limit=10 \
         --save-build-report=true \
         --build-report-path images_fuzz_tags_werf.json
