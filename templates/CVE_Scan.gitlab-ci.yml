@@ -65,7 +65,7 @@
           secret_value=$(${D8_BIN} stronghold read -field=data --format=json "${secret_path}" | jq --arg v "${stripped_value#*#}" '.[$v]' -r)
           export "$name=${secret_value}"
         fi
-        
+
       done < <(env)
       echo "Variables written to environment"
 
@@ -81,18 +81,10 @@
       echo "Known hosts file updated"
 
       echo "Cloning cve-scripts repository"
-      # A fixed path is not safe here: these jobs run on shell runners that several
-      # pipelines share, so one job could remove the directory while another was
-      # cloning into it. git then aborted on the half-built repository with
-      # "BUG: refs/files-backend.c:3188: initial ref transaction called with
-      # existing refs" and dumped core, failing the scan for reasons that had
-      # nothing to do with the scan.
       cve_scripts_dir=$(mktemp -d -t cve-scripts.XXXXXXXX)
-      git clone --depth 1 --branch v2.0 "$CVE_TEST_REPO_GIT" "$cve_scripts_dir"
-      cp -r "$cve_scripts_dir"/*.sh "$cve_scripts_dir"/*.py "$cve_scripts_dir"/lib .
-      rm -rf "$cve_scripts_dir"
-      chmod +x *.sh *.py
-      echo "Scripts copied to current directory"
+      git clone --depth 1 --branch main "$CVE_TEST_REPO_GIT" "$cve_scripts_dir"
+      chmod +x "$cve_scripts_dir"/*.sh "$cve_scripts_dir"/*.py
+      echo "Scripts cloned into ${cve_scripts_dir}"
   script:
     - |
       export CS_SOURCE_TAG
@@ -129,4 +121,8 @@
 
       echo "Running cve_scan.sh"
 
-      ./cve_scan.sh
+      scan_rc=0
+      "$cve_scripts_dir"/cve_scan.sh || scan_rc=$?
+      rm -rf "$cve_scripts_dir"
+      exit "$scan_rc"
+
