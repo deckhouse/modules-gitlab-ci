@@ -85,7 +85,7 @@
       git clone --depth 1 --branch main "$CVE_TEST_REPO_GIT" "$cve_scripts_dir"
       chmod +x "$cve_scripts_dir"/*.sh "$cve_scripts_dir"/*.py
       echo "Scripts cloned into ${cve_scripts_dir}"
-      script:
+  script:
     - |
       export SOURCE_TAG
       export CASE
