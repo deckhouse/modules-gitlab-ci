@@ -65,7 +65,7 @@
           secret_value=$(${D8_BIN} stronghold read -field=data --format=json "${secret_path}" | jq --arg v "${stripped_value#*#}" '.[$v]' -r)
           export "$name=${secret_value}"
         fi
-        
+
       done < <(env)
       echo "Variables written to environment"
 
@@ -81,12 +81,11 @@
       echo "Known hosts file updated"
 
       echo "Cloning cve-scripts repository"
-      rm -rf /tmp/cve-scripts
-      git clone --depth 1 --branch v1.0 "$CVE_TEST_REPO_GIT" /tmp/cve-scripts
-      cp -r /tmp/cve-scripts/*.sh /tmp/cve-scripts/*.py /tmp/cve-scripts/lib .
-      chmod +x *.sh *.py
-      echo "Scripts copied to current directory"
-  script:
+      cve_scripts_dir=$(mktemp -d -t cve-scripts.XXXXXXXX)
+      git clone --depth 1 --branch main "$CVE_TEST_REPO_GIT" "$cve_scripts_dir"
+      chmod +x "$cve_scripts_dir"/*.sh "$cve_scripts_dir"/*.py
+      echo "Scripts cloned into ${cve_scripts_dir}"
+      script:
     - |
       export SOURCE_TAG
       export CASE
@@ -120,4 +119,7 @@
 
       echo "Running cve_scan.sh"
 
-      ./cve_scan.sh
+      scan_rc=0
+      "$cve_scripts_dir"/cve_scan.sh || scan_rc=$?
+      rm -rf "$cve_scripts_dir"
+      exit "$scan_rc"
