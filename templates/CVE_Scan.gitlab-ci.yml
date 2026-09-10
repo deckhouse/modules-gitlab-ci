@@ -114,7 +114,7 @@
       export CS_CODEOWNERS_REPO_TOKEN
       export CS_DECKHOUSE_PRIVATE_REPO
       export CS_CONFIGMAP_PROJECT_ID
-      export CS_WORKDIR="${CI_PROJECT_DIR}/${WORKDIR}"
+      export CS_WORKDIR="${CI_PROJECT_DIR}/${CS_WORKDIR}"
       export CS_TRIVY_DB_URL="${CS_TRIVY_PROD_REGISTRY}/deckhouse/ee/security/trivy-db:2"
       export CS_TRIVY_JAVA_DB_URL="${CS_TRIVY_PROD_REGISTRY}/deckhouse/ee/security/trivy-java-db:1"
       export CS_TRIVY_POLICY_URL="${CS_TRIVY_PROD_REGISTRY}/deckhouse/ee/security/trivy-bdu:1"
