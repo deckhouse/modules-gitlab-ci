@@ -89,7 +89,12 @@ before_script:
 
     if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
       eval $(ssh-agent)
-      trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
+      # Reaping the agent must not decide the job's exit status. The trap fires on ERR as well as
+      # EXIT, and these runners are shell executors that several jobs share, so by the time it runs
+      # the agent may already be gone — killed by the first firing, or by a neighbouring job. `kill`
+      # then returns non-zero, and being the last command of the EXIT trap it becomes the script's
+      # status: a job whose every step passed reports "exit status 1" with nothing else to show.
+      trap 'kill -3 "${SSH_AGENT_PID}" 2>/dev/null || true' ERR EXIT HUP INT QUIT TERM
       export SSH_KNOWN_HOSTS=~/.ssh/known_hosts
       mkdir -p ~/.ssh
       touch ~/.ssh/known_hosts
