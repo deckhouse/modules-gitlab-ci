@@ -33,9 +33,10 @@
           echo "Existed ssh auth sock: ${SSH_AUTH_SOCK}"
       else
           eval "$(ssh-agent -s)" > /dev/null
-          # Same reason as in Setup.gitlab-ci.yml: an agent that is already gone must not turn a
-          # passing job into "exit status 1".
-          trap 'kill -3 "${SSH_AGENT_PID}" 2>/dev/null || true' ERR EXIT HUP INT QUIT TERM ABRT
+          # Same reasons as in Setup.gitlab-ci.yml: not on ERR, because that fires on the first
+          # non-zero command anywhere in the job and would reap an agent this job still needs; and
+          # guarded, so reaping never decides the job's exit status.
+          trap 'kill -3 "${SSH_AGENT_PID}" 2>/dev/null || true' EXIT HUP INT QUIT TERM ABRT
           echo "Using new ssh agent pid: ${SSH_AGENT_PID}"
           echo "Using new ssh auth sock: ${SSH_AUTH_SOCK}"
       fi

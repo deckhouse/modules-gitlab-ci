@@ -26,7 +26,10 @@ before_script:
   - |
     docker_dir=$(mktemp -d)
     export DOCKER_CONFIG=$docker_dir
-    trap 'rm -rf "$docker_dir"' ERR EXIT HUP INT QUIT TERM
+    # Not on ERR. This directory IS the job's registry credentials ($DOCKER_CONFIG), and an ERR trap
+    # fires on the first non-zero command anywhere in the job — including ones the script handles and
+    # expects — which would delete them out from under every later step.
+    trap 'rm -rf "$docker_dir"' EXIT HUP INT QUIT TERM
 
   # Setup trdl
   - |
@@ -89,12 +92,23 @@ before_script:
 
     if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
       eval $(ssh-agent)
-      # Reaping the agent must not decide the job's exit status. The trap fires on ERR as well as
-      # EXIT, and these runners are shell executors that several jobs share, so by the time it runs
-      # the agent may already be gone — killed by the first firing, or by a neighbouring job. `kill`
-      # then returns non-zero, and being the last command of the EXIT trap it becomes the script's
-      # status: a job whose every step passed reports "exit status 1" with nothing else to show.
-      trap 'kill -3 "${SSH_AGENT_PID}" 2>/dev/null || true' ERR EXIT HUP INT QUIT TERM
+      # Reap the agent when the job ENDS, and not on ERR.
+      #
+      # An ERR trap fires on the first non-zero command anywhere in the job, and `set +e` does not
+      # disable it — which is the trap most people expect it to be. A few lines below, the loop that
+      # fills known_hosts runs `grep -q` to ask whether a host key is already there; a "no" is the
+      # normal answer and the code appends the key, but it is also a non-zero exit. So the agent was
+      # killed seconds after being started, and every later step that needed it broke — `werf build`
+      # with `cannot initialize ssh agent: unable to connect to ... /tmp/ssh-*/agent.N`. It looked
+      # intermittent only because a runner whose known_hosts already had the key answers zero.
+      #
+      # `2>/dev/null || true` keeps reaping from deciding the job's exit status: the trap also fires
+      # on EXIT, and a failing `kill` there raises ERR, fires the trap again and exits 1 — a job whose
+      # every step passed reporting "exit status 1" with nothing else to show.
+      #
+      # This replaces the docker_dir trap above (bash keeps one handler per signal), so it does that
+      # cleanup too.
+      trap 'kill -3 "${SSH_AGENT_PID}" 2>/dev/null || true; rm -rf "$docker_dir"' EXIT HUP INT QUIT TERM
       export SSH_KNOWN_HOSTS=~/.ssh/known_hosts
       mkdir -p ~/.ssh
       touch ~/.ssh/known_hosts
