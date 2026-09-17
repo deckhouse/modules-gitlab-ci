@@ -388,6 +388,24 @@
 
         cd "$dir" || continue
 
+        # The name this go.mod declares, read from the file rather than from
+        # `go list -m all`: in a repository with a go.work that command lists
+        # every workspace module, each of them without a version, so a loop that
+        # compared each versionless entry against the directory under check
+        # reported all the siblings as wrongly named. sds-replicated-volume has
+        # nineteen modules in its workspace and collected 136 such findings, none
+        # of them real, and no edit to any go.mod could make the job green.
+        GITLAB_REPOSITORY=$(echo "$CI_REPOSITORY_URL" | sed 's/.*@//' | sed 's/\.git$//')
+        correct_module_name="$GITLAB_REPOSITORY"/"$dir"
+        declared_module=$(awk '$1 == "module" { print $2; exit }' go.mod)
+        echo "  Checking module name $declared_module"
+        if [ "$declared_module" != "$correct_module_name" ]; then
+          echo "  Incorrect module name: $declared_module, expected: $correct_module_name"
+          echo "  Incorrect module name: $declared_module, expected: $correct_module_name" >> "$temp_dir/incorrect_alert"
+        else
+          echo "  Correct module name: $declared_module"
+        fi
+
         # The require paths of THIS go.mod, block form and single-line form alike.
         # `go list -m all` walks the whole module graph, but the finding this job
         # reports names a file -- "... in images/controller/go.mod" -- so it may only
@@ -428,15 +446,10 @@
           fi
 
           if [ -z "$module_version" ]; then
-            echo "  Checking module name $module_name"
-            GITLAB_REPOSITORY=$(echo "$CI_REPOSITORY_URL" | sed 's/.*@//' | sed 's/\.git$//')
-            correct_module_name="$GITLAB_REPOSITORY"/"$dir"
-            if [ "$module_name" != "$correct_module_name" ]; then
-              echo "  Incorrect module name: $module_name, expected: $correct_module_name"
-              echo "  Incorrect module name: $module_name, expected: $correct_module_name" >> "$temp_dir/incorrect_alert"
-            else
-              echo "  Correct module name: $module_name"
-            fi
+            # A versionless entry is a main module -- this one, or a sibling of it
+            # in the workspace. The name of the module under check is verified
+            # above, against its own go.mod.
+            continue
           else
             echo "  Checking module tag $module_name"
             pseudo_tag=$(echo "$line" | awk '{print $2}')
