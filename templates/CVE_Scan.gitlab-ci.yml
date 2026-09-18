@@ -6,6 +6,7 @@
     CVE_TEST_REPO_GIT: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#CVE_TEST_REPO_GIT"
     CVE_TEST_SSH_PRIVATE_KEY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#CVE_TEST_SSH_PRIVATE_KEY"
     CS_SOURCE_TAG: ""
+    CS_TARGET_TAG: ""
     CS_CASE: ""
     CS_EXTERNAL_MODULE_NAME: ""
     CS_DD_URL: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Trivy_CVE_Scan_CI_Secrets#DD_URL"
@@ -24,6 +25,8 @@
     CS_SCAN_USERS: "False"
     CS_SCAN_SEVERAL_LATEST_RELEASES: "False"
     CS_LATEST_RELEASES_AMOUNT: "3"
+    CS_ONLY_IMAGES_ENABLED: "False"
+    CS_ONLY_IMAGES: ""
     CS_MODULE_PROD_REGISTRY_CUSTOM_PATH: "deckhouse/fe/modules"
     CS_MODULE_DEV_REGISTRY_CUSTOM_PATH: "sys/deckhouse-oss/modules"
     CS_DIGEST_FROM_WERF: "images_tags_werf"
@@ -82,18 +85,21 @@
 
       echo "Cloning cve-scripts repository"
       cve_scripts_dir=$(mktemp -d -t cve-scripts.XXXXXXXX)
-      git clone --depth 1 --branch main "$CVE_TEST_REPO_GIT" "$cve_scripts_dir"
+      git clone --depth 1 --branch only_images "$CVE_TEST_REPO_GIT" "$cve_scripts_dir"
       chmod +x "$cve_scripts_dir"/*.sh "$cve_scripts_dir"/*.py
       echo "Scripts cloned into ${cve_scripts_dir}"
   script:
     - |
       export CS_SOURCE_TAG
+      export CS_TARGET_TAG
       export CS_CASE
       export CS_EXTERNAL_MODULE_NAME
       export CS_RELEASE_IN_DEV
       export CS_SCAN_USERS
       export CS_SCAN_SEVERAL_LATEST_RELEASES
       export CS_LATEST_RELEASES_AMOUNT
+      export CS_ONLY_IMAGES_ENABLED
+      export CS_ONLY_IMAGES
       export CS_TRIVY_PROD_REGISTRY
       export CS_TRIVY_PROD_REGISTRY_USER
       export CS_TRIVY_PROD_REGISTRY_PASSWORD
