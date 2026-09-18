@@ -5,10 +5,9 @@
 #   $DEV_MODULES_REGISTRY - dev registry path
 #   $DEV_MODULES_REGISTRY_LOGIN - login to dev registry
 #   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
-#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
-#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
-#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
-#   $DEV_MODULES_REGISTRY_PASSWORD - password to dev registry
+#   $STAGE_MODULES_REGISTRY - stage registry path
+#   $STAGE_MODULES_REGISTRY_LOGIN - login to stage registry
+#   $STAGE_MODULES_REGISTRY_PASSWORD - password to stage registry
 #   SVACE_ANALYZE_HOST - hostname of the svace analyze vm
 #   SVACE_ANALYZE_SSH_USER: - ssh user to connect with to svace analyze vm
 #   SVACE_ANALYZE_SSH_PRIVATE_KEY_B64 - svace analyze server ssh private key
@@ -26,7 +25,10 @@ before_script:
   - |
     docker_dir=$(mktemp -d)
     export DOCKER_CONFIG=$docker_dir
-    trap 'rm -rf "$docker_dir"' ERR EXIT HUP INT QUIT TERM
+    # Not on ERR. This directory IS the job's registry credentials ($DOCKER_CONFIG), and an ERR trap
+    # fires on the first non-zero command anywhere in the job — including ones the script handles and
+    # expects — which would delete them out from under every later step.
+    trap 'rm -rf "$docker_dir"' EXIT HUP INT QUIT TERM
 
   # Setup trdl
   - |
@@ -60,6 +62,10 @@ before_script:
     if [[ -n "${DEV_MODULES_REGISTRY_LOGIN}" && -n "${DEV_MODULES_REGISTRY_PASSWORD}" && -n "${DEV_MODULES_REGISTRY}" ]]; then
       werf cr login -u ${DEV_MODULES_REGISTRY_LOGIN} -p ${DEV_MODULES_REGISTRY_PASSWORD} ${DEV_MODULES_REGISTRY}
     fi
+
+    if [[ -n "${STAGE_MODULES_REGISTRY_LOGIN}" && -n "${STAGE_MODULES_REGISTRY_PASSWORD}" && -n "${STAGE_MODULES_REGISTRY}" ]]; then
+      werf cr login -u ${STAGE_MODULES_REGISTRY_LOGIN} -p ${STAGE_MODULES_REGISTRY_PASSWORD} ${STAGE_MODULES_REGISTRY}
+    fi
   # Setup dmt
   - |
     trdl add dmt https://trrr.flant.dev/trdl-dmt/ 3 e77d785600a8c8612b84b93a5a2e4c48188d68f7478356d0708213e928bf67b024ed412e702dc32930da5c5bfc9b1c44be3ee7a292f923327815c91c6c3c3833
@@ -89,7 +95,23 @@ before_script:
 
     if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" ]]; then
       eval $(ssh-agent)
-      trap "kill -3 ${SSH_AGENT_PID}" ERR EXIT HUP INT QUIT TERM
+      # Reap the agent when the job ENDS, and not on ERR.
+      #
+      # An ERR trap fires on the first non-zero command anywhere in the job, and `set +e` does not
+      # disable it — which is the trap most people expect it to be. A few lines below, the loop that
+      # fills known_hosts runs `grep -q` to ask whether a host key is already there; a "no" is the
+      # normal answer and the code appends the key, but it is also a non-zero exit. So the agent was
+      # killed seconds after being started, and every later step that needed it broke — `werf build`
+      # with `cannot initialize ssh agent: unable to connect to ... /tmp/ssh-*/agent.N`. It looked
+      # intermittent only because a runner whose known_hosts already had the key answers zero.
+      #
+      # `2>/dev/null || true` keeps reaping from deciding the job's exit status: the trap also fires
+      # on EXIT, and a failing `kill` there raises ERR, fires the trap again and exits 1 — a job whose
+      # every step passed reporting "exit status 1" with nothing else to show.
+      #
+      # This replaces the docker_dir trap above (bash keeps one handler per signal), so it does that
+      # cleanup too.
+      trap 'kill -3 "${SSH_AGENT_PID}" 2>/dev/null || true; rm -rf "$docker_dir"' EXIT HUP INT QUIT TERM
       export SSH_KNOWN_HOSTS=~/.ssh/known_hosts
       mkdir -p ~/.ssh
       touch ~/.ssh/known_hosts
