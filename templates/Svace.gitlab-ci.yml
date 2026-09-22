@@ -7,14 +7,37 @@
 # PROJECT_GROUP - project group name for svacer import
 # IF_NO_GROUP - action to be performed if no project group is specified
 # SKIP_UNREACHABLE_PROCEDURE_ANALYSIS - exclusion procedure option
+# VAULT_ROLE - vault role for the autoimport phase; without it the phase is skipped
 
 
 .svace_analyze:
+  image: ${SVACER_AUTOREVIEW_IMAGE}
+  interruptible: false
+  timeout: 2h
+
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: gitlab-access-aud
+
   variables:
+    SVACER_AUTOREVIEW_IMAGE: registry.flant.com/deckhouse/ssdlc-tools/svacer-autoreview:0.6.0
+    GIT_STRATEGY: none
+    SVACER_AUTOIMPORT_ENABLE: "true"
     PROJECT_GROUP: ${CI_PROJECT_NAME}
     COMMIT_REF_NAME: ${CI_COMMIT_REF_NAME}
     COMMIT_HASH: ${CI_COMMIT_SHA}
     SVACE_ANALYZE_DIR: "svace-analyze"
+    WORKDIR: ${CI_PROJECT_DIR}/workdir
+    VAULT_ADDR: "https://seguro.flant.com"
+    ENV: "PROD"
+    DRY_RUN: "false"
+    SVACER_URL_PROD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#SVACER_URL"
+    SVACER_TOKEN_PROD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#SVACER_TOKEN_PROD"
+    S3_ENDPOINT: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_ENDPOINT"
+    S3_REGION: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_REGION"
+    S3_BUCKET: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_BUCKET"
+    S3_ACCESS_KEY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_ACCESS_KEY"
+    S3_SECRET_KEY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_SECRET_KEY"
 
   allow_failure:
     exit_codes: 11
@@ -24,6 +47,15 @@
     exit_codes:
       - 12
       - 137
+
+  artifacts:
+    when: always
+    paths:
+      - workdir/autoimport
+      - workdir/cache
+    expire_in: 30 days
+
+  before_script: []
 
   script:
     # Start ssh agent if it isn't running already
@@ -45,28 +77,18 @@
         SVACE_ANALYZE_SSH_PRIVATE_KEY=$(echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d)
       fi
 
-      echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" | ssh-add -
+      echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" | tr -d '\r' | ssh-add -
 
     # Add Svace analyze host to known_hosts
     - |
-      host=${SVACE_ANALYZE_HOST}
-
-      host_ip=$(nslookup "$host" | awk '/^Address: / { print $2 }')
-
-      mkdir -p ~/.ssh
-      touch ~/.ssh/known_hosts
-      HOST_KEYS=$(ssh-keyscan -H "$host" 2>/dev/null)
-      while IFS= read -r KEY_LINE; do
-          CONSTANT_PART=$(awk '{print $2, $3}' <<< "$KEY_LINE")
-          if grep -q "$CONSTANT_PART" ~/.ssh/known_hosts; then
-              ssh-keygen -R $host
-              ssh-keygen -R $host_ip
-          fi
-          echo "$KEY_LINE" >> ~/.ssh/known_hosts
-      done <<< "$HOST_KEYS"
+      export ISOLATE_KNOWN_HOSTS="${CI_PROJECT_DIR}/.ssh-known_hosts"
+      HOST="$(echo "${SVACE_ANALYZE_HOST}" | sed -E 's/.*@([^:]+).*/\1/')"
+      ssh-keyscan -t ed25519 -H "${HOST}" >> "${ISOLATE_KNOWN_HOSTS}"
 
     # Start Svace analysis
     - |
+      set +e
+      (
       echo "COMMIT_REF_NAME: ${COMMIT_REF_NAME}"
       echo "COMMIT_HASH: ${COMMIT_HASH}"
 
@@ -92,7 +114,7 @@
       info() { echo -e "${CYAN}$(date '+%Y-%m-%d %H:%M:%S') ${BLUE}INFO: ${1}${NC}"; }
       success() { echo -e "${CYAN}$(date '+%Y-%m-%d %H:%M:%S') ${GREEN}SUCCESS: ${1}${NC}"; }
 
-      SSH="ssh -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=12"
+      SSH="ssh -o UserKnownHostsFile=${ISOLATE_KNOWN_HOSTS} -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=12"
 
       send() {
           # $1 - command to send
@@ -341,3 +363,54 @@
           send "find /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} -maxdepth 2 -type d -empty -delete"
           info "Cleanup completed successfully"
       done
+      )
+      SVACE_RC=$?
+      set -e
+      [[ "${SVACE_RC}" == "0" || "${SVACE_RC}" == "11" ]] || exit "${SVACE_RC}"
+
+    # Drop the analyze credentials before the svacer secrets are read
+    - |
+      kill -3 "${SSH_AGENT_PID}" 2>/dev/null || true
+      unset SSH_AUTH_SOCK SSH_AGENT_PID
+      unset SVACE_ANALYZE_SSH_PRIVATE_KEY SVACE_ANALYZE_SSH_PRIVATE_KEY_B64
+      rm -f "${ISOLATE_KNOWN_HOSTS}"
+
+    # Apply the cached Svacer decisions to the snapshot the analysis imported
+    - |
+      svacer_autoimport() (
+          set -e
+          export BRANCH="${BRANCH:-${COMMIT_REF_NAME}}"
+          export COMMIT="${COMMIT:-${COMMIT_HASH}}"
+
+          VAULT_TOKEN=$(d8 stronghold write -field=token auth/fox/login role="${VAULT_ROLE}" jwt="${VAULT_ID_TOKEN}" 2>/dev/null)
+          [[ -n "${VAULT_TOKEN}" ]] || { echo "VAULT_TOKEN is empty"; exit 1; }
+          export VAULT_TOKEN
+
+          while IFS='=' read -r name value; do
+              if [[ $value == vault:* ]]; then
+                  stripped_value=${value#vault:}
+                  secret_path="${stripped_value%%#*}"
+                  secret_value=$(d8 stronghold read -field=data -format=json "${secret_path}" 2>/dev/null | jq --arg v "${stripped_value#*#}" '.[$v]' -r)
+                  export "$name=${secret_value}"
+              fi
+          done < <(env)
+
+          rm -rf "${WORKDIR}"
+          cd /app
+          python3 -m src.cache_pull
+          python3 -m src.autoimport
+      )
+
+      if [[ "${SVACER_AUTOIMPORT_ENABLE}" != "true" ]]; then
+          echo "SVACER_AUTOIMPORT_ENABLE is not \"true\", skipping svacer autoimport"
+      elif [[ -z "${VAULT_ROLE:-}" ]]; then
+          echo "::warning::VAULT_ROLE is not set, skipping svacer autoimport"
+      else
+          set +e
+          svacer_autoimport
+          IMPORT_RC=$?
+          set -e
+          [[ "${IMPORT_RC}" == "0" ]] || echo "::warning::svacer autoimport failed with code ${IMPORT_RC}"
+      fi
+
+      exit "${SVACE_RC}"
