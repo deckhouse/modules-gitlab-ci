@@ -418,7 +418,9 @@
           python3 -m src.autoimport
       )
 
-      if [[ "${SVACER_AUTOIMPORT_ENABLE}" != "true" ]]; then
+      if [[ "${SVACE_RC}" != "0" ]]; then
+          echo "svace analyze exited with code ${SVACE_RC}, nothing was imported into svacer, skipping svacer autoimport"
+      elif [[ "${SVACER_AUTOIMPORT_ENABLE}" != "true" ]]; then
           echo "SVACER_AUTOIMPORT_ENABLE is not \"true\", skipping svacer autoimport"
       elif [[ -z "${VAULT_ROLE:-}" ]]; then
           echo "::warning::VAULT_ROLE is not set, skipping svacer autoimport"
@@ -441,7 +443,9 @@
           python3 -m src.autoreview
       )
 
-      if [[ "${SVACER_AUTOREVIEW_ENABLE}" != "true" ]]; then
+      if [[ "${SVACE_RC}" != "0" ]]; then
+          echo "svace analyze exited with code ${SVACE_RC}, nothing was imported into svacer, skipping svacer autoreview"
+      elif [[ "${SVACER_AUTOREVIEW_ENABLE}" != "true" ]]; then
           echo "SVACER_AUTOREVIEW_ENABLE is not \"true\", skipping svacer autoreview"
       elif [[ -z "${VAULT_ROLE:-}" ]]; then
           echo "::warning::VAULT_ROLE is not set, skipping svacer autoreview"
