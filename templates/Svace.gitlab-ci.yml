@@ -7,13 +7,13 @@
 # PROJECT_GROUP - project group name for svacer import
 # IF_NO_GROUP - action to be performed if no project group is specified
 # SKIP_UNREACHABLE_PROCEDURE_ANALYSIS - exclusion procedure option
-# VAULT_ROLE - vault role for the autoimport phase; without it the phase is skipped
+# VAULT_ROLE - vault role for the autoimport and autoreview phases; without it they are skipped
 
 
 .svace_analyze:
   image: ${SVACER_AUTOREVIEW_IMAGE}
   interruptible: false
-  timeout: 2h
+  timeout: 5h
 
   id_tokens:
     VAULT_ID_TOKEN:
@@ -23,6 +23,7 @@
     SVACER_AUTOREVIEW_IMAGE: registry.flant.com/deckhouse/ssdlc-tools/svacer-autoreview:0.6.0
     GIT_STRATEGY: none
     SVACER_AUTOIMPORT_ENABLE: "true"
+    SVACER_AUTOREVIEW_ENABLE: "true"
     PROJECT_GROUP: ${CI_PROJECT_NAME}
     COMMIT_REF_NAME: ${CI_COMMIT_REF_NAME}
     COMMIT_HASH: ${CI_COMMIT_SHA}
@@ -31,6 +32,14 @@
     VAULT_ADDR: "https://seguro.flant.com"
     ENV: "PROD"
     DRY_RUN: "false"
+    AUTOREVIEW_LIMIT: "10"
+    AUTOREVIEW_CONCURRENCY: "8"
+    AUTOREVIEW_SEVERITY_FILTER: "Critical,Major"
+    DEBATE_MAX_ROUNDS: "3"
+    MODEL_CODEX: "gpt-5.6-luna"
+    MODEL_OPENCODE: "gemini-3.7-flash"
+    EFFORT_CODEX: "xhigh"
+    EFFORT_OPENCODE: "high"
     SVACER_URL_PROD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#SVACER_URL"
     SVACER_TOKEN_PROD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#SVACER_TOKEN_PROD"
     S3_ENDPOINT: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_ENDPOINT"
@@ -38,6 +47,8 @@
     S3_BUCKET: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_BUCKET"
     S3_ACCESS_KEY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_ACCESS_KEY"
     S3_SECRET_KEY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_SECRET_KEY"
+    OPENWEBUI_URL: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#OPENWEBUI_URL"
+    OPENWEBUI_TOKEN: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#OPENWEBUI_TOKEN"
 
   allow_failure:
     exit_codes: 11
@@ -52,6 +63,7 @@
     when: always
     paths:
       - workdir/autoimport
+      - workdir/autoreview
       - workdir/cache
     expire_in: 30 days
 
@@ -370,6 +382,7 @@
 
     # Drop the analyze credentials before the svacer secrets are read
     - |
+      trap - ERR EXIT HUP INT QUIT TERM ABRT
       kill -3 "${SSH_AGENT_PID}" 2>/dev/null || true
       unset SSH_AUTH_SOCK SSH_AGENT_PID
       unset SVACE_ANALYZE_SSH_PRIVATE_KEY SVACE_ANALYZE_SSH_PRIVATE_KEY_B64
@@ -377,14 +390,12 @@
 
     # Apply the cached Svacer decisions to the snapshot the analysis imported
     - |
-      svacer_autoimport() (
-          set -e
+      svacer_env() {
+          VAULT_TOKEN=$(d8 stronghold write -field=token auth/fox/login role="${VAULT_ROLE}" jwt="${VAULT_ID_TOKEN}" 2>/dev/null)
+          [[ -n "${VAULT_TOKEN}" ]] || { echo "VAULT_TOKEN is empty"; return 1; }
+          export VAULT_TOKEN
           export BRANCH="${BRANCH:-${COMMIT_REF_NAME}}"
           export COMMIT="${COMMIT:-${COMMIT_HASH}}"
-
-          VAULT_TOKEN=$(d8 stronghold write -field=token auth/fox/login role="${VAULT_ROLE}" jwt="${VAULT_ID_TOKEN}" 2>/dev/null)
-          [[ -n "${VAULT_TOKEN}" ]] || { echo "VAULT_TOKEN is empty"; exit 1; }
-          export VAULT_TOKEN
 
           while IFS='=' read -r name value; do
               if [[ $value == vault:* ]]; then
@@ -394,7 +405,11 @@
                   export "$name=${secret_value}"
               fi
           done < <(env)
+      }
 
+      svacer_autoimport() (
+          set -e
+          svacer_env
           rm -rf "${WORKDIR}"
           cd /app
           python3 -m src.cache_pull
@@ -405,12 +420,37 @@
           echo "SVACER_AUTOIMPORT_ENABLE is not \"true\", skipping svacer autoimport"
       elif [[ -z "${VAULT_ROLE:-}" ]]; then
           echo "::warning::VAULT_ROLE is not set, skipping svacer autoimport"
+      elif ! command -v d8 >/dev/null; then
+          echo "::warning::no d8 in PATH, the job is not running in ${SVACER_AUTOREVIEW_IMAGE}, skipping svacer autoimport"
       else
           set +e
           svacer_autoimport
           IMPORT_RC=$?
           set -e
           [[ "${IMPORT_RC}" == "0" ]] || echo "::warning::svacer autoimport failed with code ${IMPORT_RC}"
+      fi
+
+    # Review the findings the import left Undecided
+    - |
+      svacer_autoreview() (
+          set -e
+          svacer_env
+          cd /app
+          python3 -m src.autoreview
+      )
+
+      if [[ "${SVACER_AUTOREVIEW_ENABLE}" != "true" ]]; then
+          echo "SVACER_AUTOREVIEW_ENABLE is not \"true\", skipping svacer autoreview"
+      elif [[ -z "${VAULT_ROLE:-}" ]]; then
+          echo "::warning::VAULT_ROLE is not set, skipping svacer autoreview"
+      elif ! command -v d8 >/dev/null; then
+          echo "::warning::no d8 in PATH, the job is not running in ${SVACER_AUTOREVIEW_IMAGE}, skipping svacer autoreview"
+      else
+          set +e
+          svacer_autoreview
+          REVIEW_RC=$?
+          set -e
+          [[ "${REVIEW_RC}" == "0" ]] || echo "::warning::svacer autoreview failed with code ${REVIEW_RC}"
       fi
 
       exit "${SVACE_RC}"
