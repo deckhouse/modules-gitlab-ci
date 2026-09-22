@@ -20,7 +20,7 @@
       aud: gitlab-access-aud
 
   variables:
-    SVACER_AUTOREVIEW_IMAGE: registry.flant.com/deckhouse/ssdlc-tools/svacer-autoreview:0.6.0
+    SVACER_AUTOREVIEW_IMAGE: registry.flant.com/deckhouse/ssdlc-tools/svacer-autoreview:0.6.1
     GIT_STRATEGY: none
     SVACER_AUTOIMPORT_ENABLE: "true"
     SVACER_AUTOREVIEW_ENABLE: "true"
