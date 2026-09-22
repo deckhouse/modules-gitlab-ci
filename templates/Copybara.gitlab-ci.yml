@@ -1,0 +1,78 @@
+spec:
+  inputs:
+    config:
+      default: 'copy.bara.sky'
+      description: 'Path to the copybara Starlark config, relative to the project root'
+    destination:
+      description: 'Destination repository git URL (GitLab or GitHub), without the token'
+    vault_path:
+      description: 'Path to the push-token secret in Vault, e.g.: 101ceaca-.../writetoken/token@projects'
+    stage:
+      default: 'deploy'
+      description: 'Pipeline stage of the consumer where the job should run'
+    vault_auth_role:
+      description: 'Vault auth role for the CI/CD secrets integration (VAULT_AUTH_ROLE)'
+    tags:
+      default: 'werf-2-stable'
+      description: 'Runner tag the job runs on'
+---
+
+# The copy.bara.sky config referenced via the `config` input must:
+#   - define exactly one workflow named "mirror" (core.workflow(name = "mirror", ...));
+#   - use git.origin(url = "${MIRROR_ORIGIN_URL}", ref = ...) as the origin —
+#     the job substitutes this placeholder with this project's own URL
+#     authenticated via CI_JOB_TOKEN before running copybara;
+#   - exclude itself from origin_files, so it never gets mirrored:
+#       origin_files = glob(["**"], exclude = ["<path to this file>"])
+#   - use any placeholder url in git.destination(...) — it's overridden at
+#     invocation time via the --git-destination-url CLI flag, never rendered.
+
+copybara-mirror:
+  stage: "$[[ inputs.stage ]]"
+  image: ${CI_REGISTRY}/deckhouse/ssdlc/ci-images/tools/copybara:v12
+  tags:
+  - "$[[ inputs.tags ]]"
+  interruptible: false
+  rules:
+  - if: '$CI_PIPELINE_SOURCE == "schedule" && $COPYBARA_MIRROR_ENABLE == "true"'
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: gitlab-access-aud
+  secrets:
+    MIRROR_PUSH_TOKEN:
+      vault: "$[[ inputs.vault_path ]]"
+      token: $VAULT_ID_TOKEN
+      file: false
+  variables:
+    VAULT_AUTH_PATH: fox
+    VAULT_AUTH_ROLE: "$[[ inputs.vault_auth_role ]]"
+    GIT_STRATEGY: clone
+    GIT_DEPTH: "1"
+    GIT_SUBMODULE_STRATEGY: none
+    COPYBARA_CONFIG: "$[[ inputs.config ]]"
+    MIRROR_DESTINATION: "$[[ inputs.destination ]]"
+  script:
+  - |
+    set -euo pipefail
+    
+    if [[ "${MIRROR_DESTINATION}" == *"github.com"* ]]; then
+      MIRROR_DESTINATION_AUTH="${MIRROR_DESTINATION/https:\/\//https:\/\/${MIRROR_PUSH_TOKEN}@}"
+    else
+      MIRROR_DESTINATION_AUTH="${MIRROR_DESTINATION/https:\/\//https:\/\/oauth2:${MIRROR_PUSH_TOKEN}@}"
+    fi
+    MIRROR_ORIGIN_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    
+    if [[ ! -f "${COPYBARA_CONFIG}" ]]; then
+      echo "copybara-mirror: config file '${COPYBARA_CONFIG}' not found" >&2
+      exit 1
+    fi
+    
+    RENDERED_CONFIG="$(mktemp -d)/copy.bara.sky"
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+      echo "${line//\$\{MIRROR_ORIGIN_URL\}/${MIRROR_ORIGIN_URL}}"
+    done < "${COPYBARA_CONFIG}" > "${RENDERED_CONFIG}"
+    
+    copybara "${RENDERED_CONFIG}" mirror \
+      --git-destination-url "${MIRROR_DESTINATION_AUTH}" \
+      --git-committer-name "Deckhouse Mirror Bot" \
+      --git-committer-email "mirror@deckhouse.io"
