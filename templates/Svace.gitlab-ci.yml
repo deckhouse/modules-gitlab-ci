@@ -1,16 +1,20 @@
+# Replaces .svace_analyze, .svacer_autoimport and .svacer_autoreview.
+#
 # SVACE_ANALYZE_HOST - hostname of the svace analyze server
 # SVACE_ANALYZE_SSH_USER - svace analyze server ssh username
-# SVACE_ANALYZE_SSH_PRIVATE_KEY_B64 - svace analyze server ssh provate key encoded in base64
+# SVACE_ANALYZE_SSH_PRIVATE_KEY_B64 - svace analyze server ssh private key encoded in base64
 # SVACER_URL - url to svacer server
 # SVACER_IMPORT_USER - user to import with analyzing results to svacer server
 # SVACER_IMPORT_PASSWORD - svacer import user password
 # PROJECT_GROUP - project group name for svacer import
 # IF_NO_GROUP - action to be performed if no project group is specified
 # SKIP_UNREACHABLE_PROCEDURE_ANALYSIS - exclusion procedure option
-# VAULT_ROLE - vault role for the autoimport and autoreview phases; without it they are skipped
+# VAULT_ROLE - fox jwt role carrying the sap-ssdlc-svacer-secrets policy; without it the
+# autoimport and autoreview phases are skipped
+# SVACER_AUTOIMPORT_ENABLE, SVACER_AUTOREVIEW_ENABLE - set to anything but "true" to skip a phase
 
 
-.svace_analyze:
+.svace:
   image: ${SVACER_AUTOREVIEW_IMAGE}
   interruptible: false
   timeout: 5h
@@ -384,7 +388,7 @@
 
     # Drop the analyze credentials before the svacer secrets are read
     - |
-      trap - ERR EXIT HUP INT QUIT TERM ABRT
+      trap - EXIT HUP INT QUIT TERM ABRT
       kill -3 "${SSH_AGENT_PID}" 2>/dev/null || true
       unset SSH_AUTH_SOCK SSH_AGENT_PID
       unset SVACE_ANALYZE_SSH_PRIVATE_KEY SVACE_ANALYZE_SSH_PRIVATE_KEY_B64

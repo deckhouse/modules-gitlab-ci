@@ -1,5 +1,5 @@
 # LLM-review the Undecided findings svacer_autoimport left behind. Runs after it. Consuming module sets VAULT_ROLE.
-# Superseded by the autoreview phase of .svace_analyze; running both reviews twice.
+# Superseded by the autoreview phase of .svace in Svace.gitlab-ci.yml; running both reviews twice.
 
 .svacer_autoreview:
   image: ${SVACER_AUTOREVIEW_IMAGE}

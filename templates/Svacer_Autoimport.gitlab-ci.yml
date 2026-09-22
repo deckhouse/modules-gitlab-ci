@@ -1,5 +1,5 @@
 # Reuse prior Svacer decisions on svace_analyze snapshots. Consuming module sets VAULT_ROLE.
-# Superseded by the autoimport phase of .svace_analyze; running both imports twice.
+# Superseded by the autoimport phase of .svace in Svace.gitlab-ci.yml; running both imports twice.
 
 .svacer_autoimport:
   image: ${SVACER_AUTOREVIEW_IMAGE}
