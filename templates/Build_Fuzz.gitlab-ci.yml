@@ -1,0 +1,86 @@
+# Build fuzz images and trigger corpus replay in a dynamic child pipeline.
+# See examples/fuzz-build-replay.gitlab-ci.yml for the two consumer jobs.
+# The legacy Build_Fuzz_Images.gitlab-ci.yml keeps its existing behaviour.
+
+variables:
+  FUZZ_RUNNER_TAG: deckhouse
+
+.fuzz_rules:
+  rules:
+    - if: $CLEANUP_REPO == "true"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      variables:
+        FUZZ_S3_BRANCH_SLUG: ${CI_COMMIT_REF_SLUG}
+        FUZZ_PUBLISH_REPORT: "true"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - when: never
+
+.fuzz_build:
+  extends: .fuzz_rules
+  stage: build
+  variables:
+    WERF_FINAL_IMAGES_ONLY: "false"
+    WERF_REPO: ${MODULES_MODULE_SOURCE}/${MODULES_MODULE_NAME}
+    FUZZ_REPLAY_TEMPLATE_PROJECT: deckhouse/3p/deckhouse/modules-gitlab-ci
+    FUZZ_REPLAY_TEMPLATE_FILE: /templates/Replay_Fuzz.gitlab-ci.yml
+  script:
+    - |
+      set -euo pipefail
+      : "${FUZZ_REPLAY_TEMPLATE_REF:?Set FUZZ_REPLAY_TEMPLATE_REF to the ref used to include Build_Fuzz.gitlab-ci.yml}"
+      SOURCE_REPO=${SOURCE_REPO#git@}
+      SOURCE_REPO=${SOURCE_REPO//://}
+      export SOURCE_REPO="https://gitlab-ci-token:${CI_JOB_TOKEN}@${SOURCE_REPO}"
+
+      images=$(werf config list --final-images-only=false)
+      FUZZ_IMAGES=$(printf '%s\n' "$images" | grep -- '-fuzz$' || true)
+      if [[ -z "$FUZZ_IMAGES" ]]; then
+        echo 'No fuzz images found (expected image names ending in -fuzz)' >&2
+        exit 1
+      fi
+      mapfile -t fuzz_images <<< "$FUZZ_IMAGES"
+      werf build "${fuzz_images[@]}" --final-images-only=false --parallel=true \
+        --save-build-report=true --build-report-path images_fuzz_tags_werf.json
+      jq -e '.Images |= with_entries(select(.key | endswith("-fuzz"))) |
+        if (.Images | length) == 0 then error("No fuzz images in build report") else . end |
+        .Source = ((.Source // {}) + {Repository: env.CI_PROJECT_NAME, Branch: env.CI_COMMIT_REF_NAME,
+          BranchSlug: env.CI_COMMIT_REF_SLUG, Commit: env.CI_COMMIT_SHA,
+          ProjectId: env.CI_PROJECT_ID, ProjectPath: env.CI_PROJECT_PATH, ApiV4Url: env.CI_API_V4_URL})' \
+        images_fuzz_tags_werf.json > images_fuzz_tags_werf.json.tmp
+      mv images_fuzz_tags_werf.json.tmp images_fuzz_tags_werf.json
+
+      # Resolve the include now: dynamic child includes cannot use CI variables.
+      # GitLab expands the matrix after the build discovers the fuzz images.
+      jq '{
+        include: [{project: env.FUZZ_REPLAY_TEMPLATE_PROJECT,
+          ref: env.FUZZ_REPLAY_TEMPLATE_REF, file: env.FUZZ_REPLAY_TEMPLATE_FILE}],
+        stages: ["fuzz", "fuzz-report"],
+        replay_fuzz: {extends: ".replay_fuzz",
+          parallel: {matrix: [{FUZZ_IMAGE: (.Images | keys)}]}},
+        publish_fuzz_report: {extends: ".publish_fuzz_report"}
+      }' images_fuzz_tags_werf.json > fuzz-replay-pipeline.yml
+  artifacts:
+    paths:
+      - images_fuzz_tags_werf.json
+      - fuzz-replay-pipeline.yml
+    expire_in: 7 days
+  tags:
+    - $FUZZ_RUNNER_TAG
+
+.fuzz_replay:
+  extends: .fuzz_rules
+  stage: fuzz
+  needs:
+    - job: build_fuzz
+      artifacts: false
+  variables:
+    FUZZ_PARENT_PIPELINE_ID: $CI_PIPELINE_ID
+    FUZZ_S3_REPOSITORY: ${CI_PROJECT_NAME}
+    FUZZ_S3_BRANCH_SLUG: main
+    FUZZ_PUBLISH_REPORT: "false"
+  trigger:
+    include:
+      - artifact: fuzz-replay-pipeline.yml
+        job: build_fuzz
+    strategy: depend

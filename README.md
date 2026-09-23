@@ -30,6 +30,18 @@ Build:
 
 The [`examples`](examples/) folder contains examples of `.gitlab-ci.yml` that can be assembled from the templates.
 
+## Fuzz Build and Replay
+
+**Build_Fuzz.gitlab-ci.yml** provides `.fuzz_build` and `.fuzz_replay` for separate
+image build and corpus replay steps. The build discovers `*-fuzz` images and
+generates a child pipeline using **Replay_Fuzz.gitlab-ci.yml**. Each image replays
+its S3 corpus in a separate job, retaining failure diagnostics and reproduction
+commands. Default-branch build reports are published only after replay succeeds.
+
+See the [two-job example](examples/fuzz-build-replay.gitlab-ci.yml) and
+[configuration guide](docs/Fuzz.gitlab-ci.md). The existing
+**Build_Fuzz_Images.gitlab-ci.yml** templates remain unchanged.
+
 ## Merge MR and Create Release
 
 Template **Merge_Release.gitlab-ci.yml** implements the same flow as [modules-actions merge-and-release](https://github.com/deckhouse/modules-actions/tree/main/merge-and-release) (PR [#57](https://github.com/deckhouse/modules-actions/pull/57)):
