@@ -1,0 +1,466 @@
+# Replaces .svace_analyze, .svacer_autoimport and .svacer_autoreview.
+#
+# SVACE_ANALYZE_HOST - hostname of the svace analyze server
+# SVACE_ANALYZE_SSH_USER - svace analyze server ssh username
+# SVACE_ANALYZE_SSH_PRIVATE_KEY_B64 - svace analyze server ssh private key encoded in base64
+# SVACER_URL - url to svacer server
+# SVACER_IMPORT_USER - user to import with analyzing results to svacer server
+# SVACER_IMPORT_PASSWORD - svacer import user password
+# PROJECT_GROUP - project group name for svacer import
+# IF_NO_GROUP - action to be performed if no project group is specified
+# SKIP_UNREACHABLE_PROCEDURE_ANALYSIS - exclusion procedure option
+# VAULT_ROLE - fox jwt role carrying the sap-ssdlc-svacer-secrets policy; without it the
+# autoimport and autoreview phases are skipped
+# SVACER_AUTOIMPORT_ENABLE, SVACER_AUTOREVIEW_ENABLE - set to anything but "true" to skip a phase
+
+
+.svace:
+  image: ${SVACER_AUTOREVIEW_IMAGE}
+  interruptible: false
+  timeout: 5h
+
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: gitlab-access-aud
+
+  variables:
+    SVACER_AUTOREVIEW_IMAGE: registry.flant.com/deckhouse/ssdlc-tools/svacer-autoreview:0.6.2
+    GIT_STRATEGY: none
+    SVACER_AUTOIMPORT_ENABLE: "true"
+    SVACER_AUTOREVIEW_ENABLE: "true"
+    PROJECT_GROUP: ${CI_PROJECT_NAME}
+    COMMIT_REF_NAME: ${CI_COMMIT_REF_NAME}
+    COMMIT_HASH: ${CI_COMMIT_SHA}
+    SVACE_ANALYZE_DIR: "svace-analyze"
+    WORKDIR: ${CI_PROJECT_DIR}/workdir
+    VAULT_ADDR: "https://seguro.flant.com"
+    ENV: "PROD"
+    DRY_RUN: "false"
+    AUTOREVIEW_LIMIT: "10"
+    AUTOREVIEW_CONCURRENCY: "8"
+    AUTOREVIEW_SEVERITY_FILTER: "Critical,Major"
+    DEBATE_MAX_ROUNDS: "3"
+    AUTOREVIEW_HARD: "true"
+    MODEL_CODEX: "gpt-5.6-luna"
+    MODEL_OPENCODE: "gemini-3.7-flash"
+    EFFORT_CODEX: "xhigh"
+    EFFORT_OPENCODE: "high"
+    SVACER_URL_PROD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#SVACER_URL"
+    SVACER_TOKEN_PROD: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#SVACER_TOKEN_PROD"
+    S3_ENDPOINT: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_ENDPOINT"
+    S3_REGION: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_REGION"
+    S3_BUCKET: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_BUCKET"
+    S3_ACCESS_KEY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_ACCESS_KEY"
+    S3_SECRET_KEY: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#S3_SVACER_AUTOREVIEW_SECRET_KEY"
+    OPENWEBUI_URL: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#OPENWEBUI_URL"
+    OPENWEBUI_TOKEN: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#OPENWEBUI_TOKEN"
+    OPENWEBUI_BUDGET_MONTH: "vault:projects/data/24cb1d7c-717a-4f92-8547-26f632916a7a/Svace_CI#OPENWEBUI_BUDGET_MONTH"
+
+  allow_failure:
+    exit_codes: 11
+
+  retry:
+    max: 1
+    exit_codes:
+      - 12
+      - 137
+
+  artifacts:
+    when: always
+    paths:
+      - workdir/autoimport
+      - workdir/autoreview
+      - workdir/cache
+    expire_in: 30 days
+
+  before_script: []
+
+  script:
+    # Start ssh agent if it isn't running already
+    - |
+      if [[ -n "${SSH_AUTH_SOCK}" && -n "${SSH_AGENT_PID}" ]]; then
+          echo "Existed ssh agent pid: ${SSH_AGENT_PID}"
+          echo "Existed ssh auth sock: ${SSH_AUTH_SOCK}"
+      else
+          eval "$(ssh-agent -s)" > /dev/null
+          # Same reasons as in Setup.gitlab-ci.yml: not on ERR, because that fires on the first
+          # non-zero command anywhere in the job and would reap an agent this job still needs; and
+          # guarded, so reaping never decides the job's exit status.
+          trap 'kill -3 "${SSH_AGENT_PID}" 2>/dev/null || true' EXIT HUP INT QUIT TERM ABRT
+          echo "Using new ssh agent pid: ${SSH_AGENT_PID}"
+          echo "Using new ssh auth sock: ${SSH_AUTH_SOCK}"
+      fi
+
+      if [[ -n "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" ]]; then
+        SVACE_ANALYZE_SSH_PRIVATE_KEY=$(echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY_B64}" | base64 -d)
+      fi
+
+      echo "${SVACE_ANALYZE_SSH_PRIVATE_KEY}" | tr -d '\r' | ssh-add -
+
+    # Add Svace analyze host to known_hosts
+    - |
+      export ISOLATE_KNOWN_HOSTS="${CI_PROJECT_DIR}/.ssh-known_hosts"
+      HOST="$(echo "${SVACE_ANALYZE_HOST}" | sed -E 's/.*@([^:]+).*/\1/')"
+      ssh-keyscan -t ed25519 -H "${HOST}" >> "${ISOLATE_KNOWN_HOSTS}"
+
+    # Start Svace analysis
+    - |
+      set +e
+      (
+      echo "COMMIT_REF_NAME: ${COMMIT_REF_NAME}"
+      echo "COMMIT_HASH: ${COMMIT_HASH}"
+
+      set -e
+
+      # Define anlysis options
+      SKIP_UNREACHABLE_PROCEDURE_ANALYSIS=${SKIP_UNREACHABLE_PROCEDURE_ANALYSIS:-"deps"}
+
+      # Define import options
+      PROJECT_GROUP=${PROJECT_GROUP:-"Unspecified"}
+      IF_NO_GROUP=${IF_NO_GROUP:-"add"}
+
+      # Define color codes
+      RED="\033[0;31m"   # Red for errors
+      YELLOW="\033[0;33m" # Yellow for warnings
+      GREEN="\033[0;32m"  # Green for success
+      BLUE="\033[0;34m"   # Blue for info
+      CYAN="\033[0;36m"   # Cyan fot datetime
+      NC="\033[0m"        # No color (reset)
+
+      error() { echo -e "${CYAN}$(date '+%Y-%m-%d %H:%M:%S') ${RED}ERROR: ${1}${NC}" >&2; }
+      warning() { echo -e "${CYAN}$(date '+%Y-%m-%d %H:%M:%S') ${YELLOW}WARNING: ${1}${NC}"; }
+      info() { echo -e "${CYAN}$(date '+%Y-%m-%d %H:%M:%S') ${BLUE}INFO: ${1}${NC}"; }
+      success() { echo -e "${CYAN}$(date '+%Y-%m-%d %H:%M:%S') ${GREEN}SUCCESS: ${1}${NC}"; }
+
+      SSH="ssh -o UserKnownHostsFile=${ISOLATE_KNOWN_HOSTS} -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=12"
+
+      send() {
+          # $1 - command to send
+          # $2 - retries count
+          local command="$1"
+          local retries="${2:-3}"
+          local attempt=0
+          local success=0
+          result=""
+
+          while [ "$attempt" -lt "$retries" ]; do
+              result=$($SSH ${SVACE_ANALYZE_SSH_USER}@${SVACE_ANALYZE_HOST} "${command}") && success=1 && break
+              error "Command failed. Retrying..."
+              attempt=$((attempt + 1))
+              sleep 2
+          done
+
+          if [ "$success" -eq 0 ]; then
+              error "All $retries attempts failed!"
+              return 1
+          else
+              echo "${result}"
+              return 0
+          fi
+      }
+
+      send_request () {
+          # $1 - request
+          # $2 - retries count
+          local request="${1}"
+          local expected_code="200"
+          local retries="${2:-3}"
+          local attempt=0
+          local success=0
+          local sleep_timeout=2
+          local max_sleep=500
+          local svacer_user=${SVACER_IMPORT_USER}
+          local svace_password=${SVACER_IMPORT_PASSWORD}
+          local token_response_code=""
+          local token_response=""
+          result=""
+
+          get_token="curl --write-out \"\\n%{http_code}\" -sSL --request POST \
+          --url ${url}/api/public/login \
+          --header 'User-Agent: Curl' \
+          --header 'content-type: application/json' \
+          --data '{ \
+          \"auth_type\": \"svacer\", \
+          \"login\": \"${svacer_user}\", \
+          \"password\": \"${svace_password}\" \
+          }'"
+
+          while [ "$attempt" -lt "$retries" ]; do
+              response=$($SSH ${SVACE_ANALYZE_SSH_USER}@${SVACE_ANALYZE_HOST} "${get_token}") && success=1 || success=0
+
+              if [[ $success == 1 ]]; then
+                  token_response_code=$(echo "$response" | tail -n1)
+                  token_response=$(echo "${response}" | sed '$d')
+                  if [[ "${token_response_code}" == "${expected_code}" && -n "${token_response}" ]]; then
+                      token=$(jq -r '.token' <<< "${token_response}") && success=1 || success=0
+                      if [[ $success == 1 && -n "${token}" ]]; then
+                          request="${request} --header 'Authorization: Bearer ${token}'"
+                          response=$($SSH ${SVACE_ANALYZE_SSH_USER}@${SVACE_ANALYZE_HOST} "${request}") && success=1 || success=0
+
+                          if [[ $success == 1 ]]; then
+                              result=$(echo "${response}" | sed '$d')
+                              response_code=$(echo "$response" | tail -n1)
+                              [[ "${response_code}" == "${expected_code}" && -n "${result}" ]] || success=0 && success=1 && break
+                          fi
+                      fi
+                  fi
+              fi
+
+              error "Request failed with code: ${response_code}. Retrying..."
+              error "Sleeping for ${sleep_timeout} sec ..."
+              sleep $sleep_timeout
+              sleep_timeout=$((sleep_timeout*2))
+              ((sleep_timeout > max_sleep)) && sleep_timeout=$max_sleep
+              attempt=$((attempt + 1))
+          done
+
+          if [ "$success" -eq 0 ]; then
+              error "All $retries attempts failed!"
+              return 1
+          else
+              echo "${result}"
+              return 0
+          fi
+      }
+
+      upload_to_svacer() {
+          # $1 - svacer project name
+          # $2 - branch name
+          # $3 - path to archive
+          # $4 - waiting timeout
+          # $5 - polling interval
+          # $6 - request attempts number
+
+          local url="${SVACER_URL}"
+          local project_name="${1}"
+          local branch_name="${2}"
+          local archive_name="${3}"
+          local timeout=${4:-1800}
+          local interval=${5:-10}
+          local retries=$((timeout/interval))
+          local request_attempts=${6:-10}
+          local import_task_id=""
+          local import_task_status=""
+          local success=0
+          local response=""
+
+          svacer_import="curl --write-out \"\\n%{http_code}\" -sSL --request POST \
+          --url ${url}/api/public/svace/import\\?async\\=true \
+          --header 'User-Agent: Curl' \
+          --header 'content-type: multipart/form-data' \
+          --form project=\"${project_name}\" \
+          --form branch=\"${branch_name}\" \
+          --form file=@\"${archive_name}\" \
+          --form options='{\"values\":[ \
+          {\"option\":\"project-group\",\"value\":\"${PROJECT_GROUP}\"}, \
+          {\"option\":\"if-no-group\",\"value\":\"${IF_NO_GROUP}\"}, \
+          {\"option\":\"field\",\"value\":\"CI_COMMIT_HASH:${COMMIT_HASH}\"}, \
+          {\"option\":\"field\",\"value\":\"CI_COMMIT_REF_NAME:${COMMIT_REF_NAME}\"} \
+          ]}'"
+
+          info "Importing \"${project_name}\"..."
+          response=$(send_request "${svacer_import}" $request_attempts)
+          read import_task_id import_task_status <<< $(jq -r '(.task_id|tostring)+" "+.status' <<< ${response})
+          if [[ -z "${import_task_id}" ]]; then
+              error "Import task failed. Response: ${response}"
+              exit 12
+          fi
+          info "Import task scheduled succesfully. Task id: ${import_task_id}"
+
+          get_import_log="curl --write-out \"\\n%{http_code}\" -sSL --request GET \
+          --url ${url}/api/public/svace/import/logs/${import_task_id} \
+          --header 'User-Agent: Curl'"
+
+          info "Waiting for import to complete..."
+          for ((i = 0; i < retries; i++)); do
+              info "Checking import task status..."
+              response=$(send_request "${get_import_log}" $request_attempts)
+
+              if grep -Eqi '^## END OF TASK' <<< "${response}"; then
+                  if grep -Eqi 'Upload SUCCESS' <<< "${response}"; then
+                      success=1
+                      break
+                  else
+                      success=0
+                      break
+                  fi
+              fi
+
+
+              info "Import of ${project_name} in progress. Sleeping for $interval sec"
+              sleep $interval
+          done
+
+          if [ "$success" -eq 0 ]; then
+              error "All attempts failed!"
+              error "${response}"
+              return 1
+          else
+              return 0
+          fi
+      }
+
+      define_import_params() {
+          local -n project="${1}"
+          local -n branch="${2}"
+          if [[ $(send "[[ -f ${proj}/.svace-dir/import-settings ]] && echo true || echo false") == true ]]; then
+              import_settings=$(send "cat /${proj}/.svace-dir/import-settings")
+              while IFS='=' read -r key val; do
+                  case "$key" in
+                  ProjectName)
+                      project=$val
+                      ;;
+                  Branch)
+                      branch=$val
+                      ;;
+                  *)
+                      warning "Undefined import setting \"${key}=${val}\" will be ommited!"
+                      ;;
+                  esac
+              done <<< "${import_settings}"
+          fi
+      }
+
+      get_svace_bin() {
+          proj="${1}"
+          svace_version=$(send "cat ${proj}/.svace-dir/svace-dir.version | awk 'FNR==3{print}'")
+
+          svace_bin="/opt/svace-${svace_version}/bin/svace"
+          if [[ $(send "[[ -x ${svace_bin} ]] && echo true || echo false") == true ]]; then
+              echo "${svace_bin}"
+          else
+              echo "svace"
+              error "\"${svace_bin}\" is not executable on analyze server. Using default."
+          fi
+      }
+
+      echo "Searching for current build artifacts on server by path: /${SVACE_ANALYZE_DIR}/${COMMIT_HASH}"
+      if [[ $(send "[[ -d /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} ]] && echo true || echo false") == false ]]; then
+        warning "Specified commit directory doesn't exists on analyze server." && exit 11
+      fi
+
+      projects=$(send "find /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} \\( -type d -iname .svace-dir -o -iname *.tar.gz \\) -exec dirname {} \\;")
+      [[ -z $projects ]] && warning "Nothing to analyze in ${proj}" && echo "::warning file=$(realpath "$0")::Nothing to analyze" && exit 0
+      info "${projects}"
+
+      info "Starting svace analyze..."
+      for proj in $projects; do
+          svacer_proj=${proj#/${SVACE_ANALYZE_DIR}/${COMMIT_HASH}/}
+          build_item=${svacer_proj##*/}
+
+          import_project=${svacer_proj}
+          import_branch=${COMMIT_REF_NAME}
+
+          if [[ $(send "[[ -d ${proj}/.svace-dir ]] && echo true || echo false") == true ]]; then
+              define_import_params import_project import_branch
+              svace_bin=$(get_svace_bin "${proj}")
+              info "Using svace binary: $svace_bin"
+
+              info "Start analyzing project \"${svacer_proj}\" ..."
+              send "${svace_bin} config --svace-dir ${proj} THREAD_NUMBER auto"
+              send "${svace_bin} analyze --set-config SKIP_UNREACHABLE_PROCEDURE_ANALYSIS=${SKIP_UNREACHABLE_PROCEDURE_ANALYSIS} --quiet --svace-dir ${proj}"
+              success "Analysis completed successfully!"
+
+              info "Start archiving project \"${svacer_proj}\" ..."
+              send "cd ${proj} && tar -czf ${build_item}.tar.gz .svace-dir && rm -rf .svace-dir"
+              info "Archiving completed successfuly!"
+          else
+              warning "Nothing to analyze! Couldn't find \".svace-dir\" in \"${proj}\""
+          fi
+
+          if [[ $(send "[[ -f ${proj}/${build_item}.tar.gz ]] && echo true || echo false") == true ]]; then
+              info "Start importing project \"${import_project}\" with branch \"${import_branch}\" ..."
+              upload_to_svacer "${import_project}" "${import_branch}" "${proj}/${build_item}.tar.gz"
+              success "Import completed successfuly!"
+          else
+              warning "Nothing to import! Couldn't find \"${build_item}.tar.gz\" in \"${proj}\""
+          fi
+
+          info "Cleaning up artifacts..."
+          send "rm -rf ${proj}"
+          send "find /${SVACE_ANALYZE_DIR}/${COMMIT_HASH} -maxdepth 2 -type d -empty -delete"
+          info "Cleanup completed successfully"
+      done
+      )
+      SVACE_RC=$?
+      set -e
+      [[ "${SVACE_RC}" == "0" || "${SVACE_RC}" == "11" ]] || exit "${SVACE_RC}"
+
+    # Drop the analyze credentials before the svacer secrets are read
+    - |
+      trap - EXIT HUP INT QUIT TERM ABRT
+      kill -3 "${SSH_AGENT_PID}" 2>/dev/null || true
+      unset SSH_AUTH_SOCK SSH_AGENT_PID
+      unset SVACE_ANALYZE_SSH_PRIVATE_KEY SVACE_ANALYZE_SSH_PRIVATE_KEY_B64
+      rm -f "${ISOLATE_KNOWN_HOSTS}"
+
+    # Apply the cached Svacer decisions to the snapshot the analysis imported
+    - |
+      svacer_env() {
+          VAULT_TOKEN=$(d8 stronghold write -field=token auth/fox/login role="${VAULT_ROLE}" jwt="${VAULT_ID_TOKEN}" 2>/dev/null)
+          [[ -n "${VAULT_TOKEN}" ]] || { echo "VAULT_TOKEN is empty"; return 1; }
+          export VAULT_TOKEN
+          export BRANCH="${BRANCH:-${COMMIT_REF_NAME}}"
+          export COMMIT="${COMMIT:-${COMMIT_HASH}}"
+
+          while IFS='=' read -r name value; do
+              if [[ $value == vault:* ]]; then
+                  stripped_value=${value#vault:}
+                  secret_path="${stripped_value%%#*}"
+                  secret_value=$(d8 stronghold read -field=data -format=json "${secret_path}" 2>/dev/null | jq --arg v "${stripped_value#*#}" '.[$v]' -r)
+                  export "$name=${secret_value}"
+              fi
+          done < <(env)
+      }
+
+      svacer_autoimport() (
+          set -e
+          svacer_env
+          rm -rf "${WORKDIR}"
+          cd /app
+          python3 -m src.cache_pull
+          python3 -m src.autoimport
+      )
+
+      if [[ "${SVACE_RC}" != "0" ]]; then
+          echo "svace analyze exited with code ${SVACE_RC}, nothing was imported into svacer, skipping svacer autoimport"
+      elif [[ "${SVACER_AUTOIMPORT_ENABLE}" != "true" ]]; then
+          echo "SVACER_AUTOIMPORT_ENABLE is not \"true\", skipping svacer autoimport"
+      elif [[ -z "${VAULT_ROLE:-}" ]]; then
+          echo "::warning::VAULT_ROLE is not set, skipping svacer autoimport"
+      elif ! command -v d8 >/dev/null; then
+          echo "::warning::no d8 in PATH, the job is not running in ${SVACER_AUTOREVIEW_IMAGE}, skipping svacer autoimport"
+      else
+          set +e
+          svacer_autoimport
+          IMPORT_RC=$?
+          set -e
+          [[ "${IMPORT_RC}" == "0" ]] || echo "::warning::svacer autoimport failed with code ${IMPORT_RC}"
+      fi
+
+    # Review the findings the import left Undecided
+    - |
+      svacer_autoreview() (
+          set -e
+          svacer_env
+          cd /app
+          python3 -m src.autoreview
+      )
+
+      if [[ "${SVACE_RC}" != "0" ]]; then
+          echo "svace analyze exited with code ${SVACE_RC}, nothing was imported into svacer, skipping svacer autoreview"
+      elif [[ "${SVACER_AUTOREVIEW_ENABLE}" != "true" ]]; then
+          echo "SVACER_AUTOREVIEW_ENABLE is not \"true\", skipping svacer autoreview"
+      elif [[ -z "${VAULT_ROLE:-}" ]]; then
+          echo "::warning::VAULT_ROLE is not set, skipping svacer autoreview"
+      elif ! command -v d8 >/dev/null; then
+          echo "::warning::no d8 in PATH, the job is not running in ${SVACER_AUTOREVIEW_IMAGE}, skipping svacer autoreview"
+      else
+          set +e
+          svacer_autoreview
+          REVIEW_RC=$?
+          set -e
+          [[ "${REVIEW_RC}" == "0" ]] || echo "::warning::svacer autoreview failed with code ${REVIEW_RC}"
+      fi
+
+      exit "${SVACE_RC}"
