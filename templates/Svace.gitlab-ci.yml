@@ -16,6 +16,8 @@
 
 .svace:
   image: ${SVACER_AUTOREVIEW_IMAGE}
+  tags:
+    - werf-2-stable
   interruptible: false
   timeout: 5h
 
