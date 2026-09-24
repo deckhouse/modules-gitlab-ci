@@ -1,0 +1,227 @@
+# Child-pipeline jobs for Build_Fuzz.gitlab-ci.yml.
+# The parent forwards registry variables and FUZZ_PARENT_PIPELINE_ID;
+# build_fuzz supplies the report, and the generated matrix selects FUZZ_IMAGE.
+.replay_fuzz:
+  stage: fuzz
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "parent_pipeline"
+  needs:
+    - pipeline: $FUZZ_PARENT_PIPELINE_ID
+      job: build_fuzz
+  before_script:
+    - |
+      set -euo pipefail
+      export DOCKER_CONFIG=$(mktemp -d)
+      trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+      printf '%s' "$MODULES_REGISTRY_PASSWORD" |
+        docker login --username "$MODULES_REGISTRY_LOGIN" --password-stdin "$MODULES_REGISTRY"
+  variables:
+    VAULT_SERVER_URL: https://seguro.flant.com
+    VAULT_AUTH_PATH: fox
+    VAULT_AUTH_ROLE: "dh-${CI_PROJECT_NAME}"
+    FUZZ_S3_REPOSITORY: ${CI_PROJECT_NAME}
+    FUZZ_S3_BRANCH_SLUG: main
+    FUZZ_PUBLISH_REPORT: "false"
+    FUZZ_RUNNER_TAG: deckhouse
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: gitlab-access-aud
+  secrets:
+    FUZZ_S3_ENDPOINT:
+      vault: 6db2f1ee-9b6f-4f4f-8381-2fb43060478a/team-ssdlc/fuzzing-s3/FUZZ_S3_ENDPOINT@projects
+      token: $VAULT_ID_TOKEN
+      file: false
+    FUZZ_S3_ACCESS_KEY:
+      vault: 6db2f1ee-9b6f-4f4f-8381-2fb43060478a/team-ssdlc/fuzzing-s3/FUZZ_S3_ACCESS_KEY@projects
+      token: $VAULT_ID_TOKEN
+      file: false
+    FUZZ_S3_SECRET_KEY:
+      vault: 6db2f1ee-9b6f-4f4f-8381-2fb43060478a/team-ssdlc/fuzzing-s3/FUZZ_S3_SECRET_KEY@projects
+      token: $VAULT_ID_TOKEN
+      file: false
+  script:
+    - |
+      set -euo pipefail
+      container="fuzz-replay-${CI_JOB_ID}"
+      trap 'docker rm -f "$container" >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"' EXIT
+      trap 'exit 130' INT
+      trap 'exit 143' TERM
+      image=$(jq -er --arg image "$FUZZ_IMAGE" '.Images[$image].DockerImageName' images_fuzz_tags_werf.json)
+      component=$(jq -r --arg image "$FUZZ_IMAGE" '
+        .Images[$image] | (.GitHubPath // .GithubPath // .GitPath // .Context // .Path // "") |
+        if . == "" then $image else . end' images_fuzz_tags_werf.json)
+      echo "Replay $FUZZ_IMAGE"
+      # Keep the stopped container until failure reports have been copied out.
+      status=0
+      docker run --init -i --name "$container" --platform linux/amd64 \
+        -e AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+        -e FUZZ_S3_ENDPOINT -e FUZZ_S3_ACCESS_KEY -e FUZZ_S3_SECRET_KEY \
+        -e FUZZ_S3_REPOSITORY -e FUZZ_S3_BRANCH_SLUG \
+        -e FUZZ_S3_COMPONENT="$component" \
+        -e FUZZ_REPLAY_IMAGE="$image" -e CI_COMMIT_SHA -e CI_JOB_URL \
+        --entrypoint bash "$image" -euo pipefail -s <<'REPLAY' || status=$?
+      report=/tmp/fuzz-replay
+      mkdir -p "$report"
+      summary="$report/summary.txt"
+      printf '=== FUZZ REPLAY SUMMARY ===\nImage: %s\nCommit: %s\nWorkdir: %s\n' \
+        "$FUZZ_REPLAY_IMAGE" "$CI_COMMIT_SHA" "$PWD" > "$summary"
+      go version >> "$summary"
+      printf 'Artifacts: %s/artifacts/browse/fuzz-replay/\n' "$CI_JOB_URL" >> "$summary"
+      export AWS_ACCESS_KEY_ID="$FUZZ_S3_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$FUZZ_S3_SECRET_KEY"
+      export AWS_DEFAULT_REGION=us-east-1 AWS_EC2_METADATA_DISABLED=true
+      aws configure set default.s3.preferred_transfer_client classic
+      aws configure set default.s3.max_concurrent_requests 2
+      module=$(GOWORK=off go list -m)
+      # Match the fuzzing dispatcher: source path, or the image name without -fuzz.
+      component=${FUZZ_S3_COMPONENT#./}
+      component=${component#/}
+      component=${component%/}
+      component=${component%-fuzz}
+      component=${component%/fuzz}
+      source="s3://anomaloys-materials/${FUZZ_S3_REPOSITORY}/${FUZZ_S3_BRANCH_SLUG}/${component}/"
+      corpus=$(mktemp -d)
+      echo "Downloading S3 corpus: $source (Go module: $module)"
+      while true; do
+        if aws --endpoint-url "$FUZZ_S3_ENDPOINT" s3 sync \
+          "$source" "$corpus/" --exclude '*' \
+          --include '*/corpus/minimized/*' --include '*/corpus/recovery/*' \
+          --include "*/corpus/gocache-fuzz/${module}/*" \
+          --exclude '*/attempts/*' --exclude '*/report/*' \
+          --only-show-errors 2> /tmp/fuzz-s3.log; then
+          break
+        else
+          status=$?
+        fi
+        cat /tmp/fuzz-s3.log >&2
+        grep -qE '\(429\)|Too Many Requests' /tmp/fuzz-s3.log || exit "$status"
+        echo 'S3 rate limit (429), retrying corpus download in 30 seconds' >&2
+        sleep 30
+      done
+      unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY FUZZ_S3_ACCESS_KEY FUZZ_S3_SECRET_KEY
+      echo "Downloaded corpus files: $(find "$corpus" -type f | wc -l)"
+      echo 'Downloaded paths (first 30):'
+      find "$corpus" -type f | sort | sed -n '1,30p'
+      export GIT_AUTHOR_NAME=fuzz GIT_AUTHOR_EMAIL=fuzz@local
+      export GIT_COMMITTER_NAME=fuzz GIT_COMMITTER_EMAIL=fuzz@local
+      # As before, discover targets even if unrelated packages fail to compile.
+      task fuzz:list > /tmp/fuzz-list.log 2>&1 || true
+      cat /tmp/fuzz-list.log
+      awk '
+        /^Fuzz[[:alnum:]_]*$/ { targets[++count] = $0; next }
+        /^(ok|FAIL|\?)[[:space:]]+/ {
+          for (i = 1; i <= count; i++) print $2 "|" targets[i]
+          delete targets; count = 0
+        }
+        END { if (count != 0) exit 1 }
+      ' /tmp/fuzz-list.log > /tmp/fuzz-targets
+      [[ -s /tmp/fuzz-targets ]] || { echo 'No Go fuzz targets found' >&2; exit 1; }
+      # The dispatcher sorts packages before assigning S3 keys to duplicate names.
+      LC_ALL=C sort -t '|' -k1,1 -k2,2 -u -o /tmp/fuzz-targets /tmp/fuzz-targets
+      declare -A seen_targets=()
+      failed=0
+      number=0
+      while IFS='|' read -r package target; do
+        s3_key=$target
+        if [[ -n "${seen_targets[$target]:-}" ]]; then s3_key="$package/$target"; fi
+        seen_targets[$target]=1
+        destination="$(go list -f '{{.Dir}}' "$package")/testdata/fuzz/$target"
+        copied=0
+        for seeds in "$corpus/$s3_key/corpus/minimized" "$corpus/$s3_key/corpus/recovery" \
+          "$corpus/$s3_key/corpus/gocache-fuzz/$package/$target"; do
+          [[ -d "$seeds" ]] || continue
+          while IFS= read -r -d '' seed; do
+            [[ -e "$destination/${seed##*/}" ]] && continue
+            mkdir -p "$destination"
+            cp -- "$seed" "$destination/"
+            copied=$((copied + 1))
+          done < <(find "$seeds" -type f -print0)
+        done
+        echo "Copied $copied S3 corpus files into $destination"
+        number=$((number + 1))
+        report_name="$number-$target"
+        output="$report/$report_name"
+        mkdir -p "$output"
+        # JSON keeps diagnostics associated with tests; render normal Go output live.
+        if go test "$package" -run "^${target}$" -count=1 -json 2> "$output/stderr.log" |
+          tee "$output/events.jsonl" | jq --unbuffered -rj '.Output // empty'; then
+          rm -rf "$output"
+          continue
+        else
+          replay_status=$?
+        fi
+        failed=$((failed + 1))
+        cat "$output/stderr.log"
+        mkdir -p "$output/corpus"
+        if [[ -d "$destination" ]]; then cp -R "$destination/." "$output/corpus/"; fi
+        jq -rj '.Output // empty' "$output/events.jsonl" > "$output/replay.log"
+        cat "$output/stderr.log" >> "$output/replay.log"
+        jq -rs --arg target "$target" '
+          [.[] | select(.Action == "fail" and .Test != null) | .Test | select(. != $target)] |
+          unique | if length == 0 then [$target] else . end | .[]
+        ' "$output/events.jsonl" > "$output/failed-tests.txt"
+        {
+          printf '\nFAILED: %s / %s (exit %s)\nS3: %s%s/corpus/\nLog: fuzz-replay/%s/replay.log\n' \
+            "$package" "$target" "$replay_status" "$source" "$s3_key" "$report_name"
+          # Omit successful subtests and progress lines, retaining errors and stacks.
+          sed -E '/^=== (RUN|PAUSE|CONT|NAME)/d; /^[[:space:]]*--- (PASS|SKIP):/d' "$output/replay.log"
+          echo 'Reproduce after downloading and unpacking this job artifacts; run from their root directory:'
+          while IFS= read -r test; do
+            run=$(printf '%s' "$test" | sed 's/[][(){}.^$*+?|\\]/\\&/g; s|/|$/^|g; s/^/^/; s/$/$/')
+            printf '\nTest: %s\n' "$test"
+            printf 'docker run --rm --platform linux/amd64 \\\n  -v "$PWD"/%q:%q:ro --workdir %q \\\n' \
+              "fuzz-replay/$report_name/corpus" "$destination" "$PWD"
+            printf '  -e GIT_AUTHOR_NAME=fuzz -e GIT_AUTHOR_EMAIL=fuzz@local -e GIT_COMMITTER_NAME=fuzz -e GIT_COMMITTER_EMAIL=fuzz@local \\\n'
+            printf '  --entrypoint go %q test %q -run %q -count=1 -v\n' "$FUZZ_REPLAY_IMAGE" "$package" "$run"
+          done < "$output/failed-tests.txt"
+        } >> "$summary"
+      done < /tmp/fuzz-targets
+      printf '\nTargets checked: %s; failed: %s\n' "$number" "$failed" >> "$summary"
+      [[ "$failed" -eq 0 ]]
+      REPLAY
+      mkdir -p fuzz-replay
+      if docker cp "$container:/tmp/fuzz-replay/." fuzz-replay/; then
+        cat fuzz-replay/summary.txt
+      else
+        echo 'Could not collect replay artifacts' >&2
+        status=1
+      fi
+      exit "$status"
+  artifacts:
+    when: always
+    paths:
+      - fuzz-replay/
+    expire_in: 7 days
+  tags:
+    - $FUZZ_RUNNER_TAG
+
+.publish_fuzz_report:
+  extends: .replay_fuzz
+  artifacts: null
+  stage: fuzz-report
+  rules:
+    - if: $FUZZ_PUBLISH_REPORT == "true"
+  needs:
+    - pipeline: $FUZZ_PARENT_PIPELINE_ID
+      job: build_fuzz
+    - job: replay_fuzz
+      artifacts: false
+  script:
+    - |
+      set -euo pipefail
+      container="fuzz-report-${CI_JOB_ID}"
+      trap 'docker rm -f "$container" >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"' EXIT
+      trap 'exit 130' INT
+      trap 'exit 143' TERM
+      image=$(jq -er '.Images | to_entries[0].value.DockerImageName' images_fuzz_tags_werf.json)
+      docker run --rm --init --name "$container" --platform linux/amd64 \
+        -e AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+        -e FUZZ_S3_ENDPOINT -e FUZZ_S3_ACCESS_KEY -e FUZZ_S3_SECRET_KEY \
+        -e FUZZ_S3_REPOSITORY -e CI_COMMIT_REF_SLUG \
+        --mount "type=bind,src=$CI_PROJECT_DIR/images_fuzz_tags_werf.json,dst=/report.json,readonly" \
+        --entrypoint bash "$image" -euc '
+          export AWS_ACCESS_KEY_ID="$FUZZ_S3_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$FUZZ_S3_SECRET_KEY"
+          export AWS_DEFAULT_REGION=us-east-1
+          aws --endpoint-url "$FUZZ_S3_ENDPOINT" s3 cp /report.json \
+            "s3://anomaloys-materials/build-reports/${FUZZ_S3_REPOSITORY}/${CI_COMMIT_REF_SLUG}/images_fuzz_tags_werf.json" \
+            --only-show-errors
+        '
