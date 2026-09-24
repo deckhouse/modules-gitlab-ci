@@ -44,7 +44,7 @@
     - |
       set -e
       echo "Installing d8-cli"
-      export D8_VERSION="v0.29.24"
+      export D8_VERSION="v0.33.22"
       echo "D8_VERSION: $D8_VERSION"
       mkdir -p ~/bin
       D8_BIN=~/bin/d8-${D8_VERSION}
