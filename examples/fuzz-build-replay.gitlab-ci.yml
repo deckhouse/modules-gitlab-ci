@@ -1,0 +1,34 @@
+# Add Build_Fuzz to the project's existing includes. Keep its existing Setup
+# or delivery-kit before_script, werf configuration and registry variables.
+include:
+  - project: deckhouse/3p/deckhouse/modules-gitlab-ci
+    ref: v19.0
+    file: /templates/Setup.gitlab-ci.yml
+  - project: deckhouse/3p/deckhouse/modules-gitlab-ci
+    ref: &fuzz_templates_ref fuzz-build-replay-templates
+    file: /templates/Build_Fuzz.gitlab-ci.yml
+
+variables:
+  # Pin both the parent and generated child template to the same ref/SHA.
+  FUZZ_REPLAY_TEMPLATE_REF: *fuzz_templates_ref
+  FUZZ_RUNNER_TAG: deckhouse
+
+stages:
+  - build
+  - fuzz
+
+# Reuse this mixin if the project already defines it. Credentials below are
+# project/group CI/CD variables; the mixin is needed by BOTH parent jobs.
+.dev-variables:
+  variables:
+    MODULES_REGISTRY: ${DEV_WRITE_REGISTRY}
+    MODULES_REGISTRY_LOGIN: ${MODULES_REGISTRY_LOGIN_DEV}
+    MODULES_REGISTRY_PASSWORD: ${MODULES_REGISTRY_PASSWORD_DEV}
+    MODULES_MODULE_SOURCE: ${MODULES_REGISTRY}/sys/deckhouse-oss/modules
+
+# Keep this name: the trigger and child jobs fetch its artifacts.
+build_fuzz:
+  extends: [.fuzz_build, .dev-variables]
+
+replay_fuzz:
+  extends: [.fuzz_replay, .dev-variables]
