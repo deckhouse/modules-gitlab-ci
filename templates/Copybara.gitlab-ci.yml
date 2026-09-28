@@ -54,25 +54,36 @@ copybara-mirror:
   script:
   - |
     set -euo pipefail
-    
+
     if [[ "${MIRROR_DESTINATION}" == *"github.com"* ]]; then
       MIRROR_DESTINATION_AUTH="${MIRROR_DESTINATION/https:\/\//https:\/\/${MIRROR_PUSH_TOKEN}@}"
     else
       MIRROR_DESTINATION_AUTH="${MIRROR_DESTINATION/https:\/\//https:\/\/oauth2:${MIRROR_PUSH_TOKEN}@}"
     fi
     MIRROR_ORIGIN_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-    
+
     if [[ ! -f "${COPYBARA_CONFIG}" ]]; then
       echo "copybara-mirror: config file '${COPYBARA_CONFIG}' not found" >&2
       exit 1
     fi
-    
+
     RENDERED_CONFIG="$(mktemp -d)/copy.bara.sky"
     while IFS= read -r line || [[ -n "${line}" ]]; do
       echo "${line//\$\{MIRROR_ORIGIN_URL\}/${MIRROR_ORIGIN_URL}}"
     done < "${COPYBARA_CONFIG}" > "${RENDERED_CONFIG}"
-    
+
+    set +e
     copybara "${RENDERED_CONFIG}" mirror \
       --git-destination-url "${MIRROR_DESTINATION_AUTH}" \
       --git-committer-name "Deckhouse Mirror Bot" \
       --git-committer-email "mirror@deckhouse.io"
+    COPYBARA_EXIT=$?
+    set -e
+
+    # copybara ExitCode.NO_OP (4): nothing new to migrate since the last run — not an error.
+    if [[ ${COPYBARA_EXIT} -eq 4 ]]; then
+      echo "copybara-mirror: origin and destination already in sync, nothing to do"
+      exit 0
+    fi
+
+    exit ${COPYBARA_EXIT}
