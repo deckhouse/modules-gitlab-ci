@@ -7,7 +7,7 @@ Include `Build_Fuzz` in a project and define two jobs:
 ```yaml
 include:
   - project: deckhouse/3p/deckhouse/modules-gitlab-ci
-    ref: &fuzz_templates_ref fuzz-build-replay-templates
+    ref: &fuzz_templates_ref fuzz-replay-engines
     file: /templates/Build_Fuzz.gitlab-ci.yml
 
 variables:
@@ -42,9 +42,11 @@ the include and `FUZZ_REPLAY_TEMPLATE_REF`; the YAML anchor keeps them in sync.
    Each image gets a separate replay job and downloads the parent build report.
 3. Replay downloads minimized and recovery corpus seeds from
    `s3://anomaloys-materials/<repository>/<branch>/<component>/` and discovers
-   targets with `task fuzz:list`. Images with `FUZZ_ENGINE=ruzzy` use the Ruzzy
-   task contract described below. Images without `FUZZ_ENGINE` retain the Go
-   behavior; unsupported engine values fail the job.
+   targets with `task fuzz:list`. Each matrix job reads its image label
+   `io.deckhouse.fuzz.engine` (`go`, `ruzzy` or `afl`). For older images without
+   the label, replay uses the image environment variable `FUZZ_ENGINE`, defaulting
+   to Go when it is absent. Unsupported engines fail before replay. Ruby/Ruzzy
+   and C/C++/AFL images use the task contracts below.
    Go replay also downloads Go cache seeds, copies the seeds to `testdata/fuzz`,
    and runs each target with `go test -run`, without starting a fuzzing campaign.
    Each input (including `F.Add` seeds) has a separate 30-second deadline.
@@ -57,7 +59,8 @@ the include and `FUZZ_REPLAY_TEMPLATE_REF`; the YAML anchor keeps them in sync.
    commands under `fuzz-replay/`. The summary and diagnostics are collected from
    the stopped container, uploaded even on failure, and retained for seven days.
    Go reports also include JSON test events; Ruzzy reports include crash
-   artifacts written by the replay task.
+   artifacts written by the replay task. AFL reports retain per-input maps and
+   a list of inputs with missing or empty maps.
 5. On the default branch, `publish_fuzz_report` uploads the build report to
    `s3://anomaloys-materials/build-reports/<repository>/<branch-slug>/` only after
    all replay jobs succeed. A failed replay fails the parent trigger as well.
@@ -123,6 +126,10 @@ forwarded by default; opt into `trigger:forward:pipeline_variables` if needed.
   a `Taskfile` exposing `fuzz:list`.
 - Go images must contain Go and use their Go module as the working directory.
   Existing S3 source-path and duplicate-target naming are preserved.
+- AFL and Ruzzy images need `sha256sum` and `find` to stage their corpus.
+- AFL images must contain AFL++ and instrumented binaries, and provide the
+  batch replay contract below. Arbitrary C/C++ binaries or libFuzzer-only
+  images cannot use the AFL contract.
 - Ruzzy images must contain Ruby and Ruzzy, use their application directory as
   the working directory, and provide the JSONL discovery and replay task
   contract described below. The image and task supply any required local
@@ -140,9 +147,9 @@ names are unchanged; use the new pair for separate build and replay steps.
 
 ## Ruzzy replay contract
 
-Set `FUZZ_ENGINE=ruzzy` in the image environment. The platform also uses the
-image label `io.deckhouse.fuzz.engine=ruzzy`; the shared `ci-images/fuzz-ruzzy`
-base provides both. `task fuzz:list` must emit one JSON object per line with
+Set the image label `io.deckhouse.fuzz.engine=ruzzy`; the shared
+`ci-images/fuzz-ruzzy` base also sets the legacy `FUZZ_ENGINE=ruzzy` environment
+variable. `task fuzz:list` must emit one JSON object per line with
 nonempty string fields `package` and `target`, for example:
 
 ```json
@@ -156,9 +163,9 @@ must not contain NUL, tabs or line breaks.
 
 For each target, replay invokes `task fuzz:replay` with `FUZZ_PKG`,
 `FUZZ_TARGET`, `FUZZ_CORPUS_DIR` and `FUZZ_ARTIFACT_DIR`. The corpus directory
-contains downloaded `minimized` and `recovery` subdirectories and may be empty.
-The task adds its built-in seeds, prepares application dependencies and replays
-inputs without generating new ones. It returns a nonzero status on failure
+contains the merged, flat corpus described below and may be empty. The task
+can add application-specific seeds, prepares dependencies and replays inputs
+without generating new ones. It returns a nonzero status on failure
 and writes crash inputs to `FUZZ_ARTIFACT_DIR`. S3 credentials are removed
 before discovery and target execution. All targets are attempted; failed
 targets retain logs, downloaded corpus, crash artifacts and a reproduction
@@ -167,3 +174,91 @@ the reproduction command.
 
 Ruzzy execution limits are owned by the image's `fuzz:replay` task;
 `FUZZ_REPLAY_INPUT_TIMEOUT` configures only the Go supervisor.
+
+
+## Shared AFL and Ruzzy corpus staging
+
+Replay combines S3 `<target>/corpus/minimized` and `recovery` with the image's
+built-in seeds. Image seed locations follow the fuzzing system contract:
+
+- `FUZZ_SEEDS/<target>` when `FUZZ_SEEDS` is set.
+- `FUZZ_SEED_DIR`, `SEED_CORPUS_DIR`, `INPUT_CORPUS_DIR` and `FUZZ_CORPUS`;
+  `{target}` and `{package}` placeholders are expanded.
+- Under the image working directory: `testdata/fuzz/<target>`, `corpus/<target>`,
+  `seeds/<target>`, `testdata/<target>`, `fuzz/seeds/<target>` and
+  `fuzz/corpus/<target>`.
+
+Directories are read recursively; AFL `.state` directories and `README.txt`
+bookkeeping files are excluded. Inputs are named by SHA-256 in a temporary
+flat directory. Identical contents are replayed once; different contents with
+the same original basename are both retained. Empty files are preserved.
+For failed targets, `corpus-sources.tsv` maps each hash to its original path
+(shell-escaped), and `corpus/` contains exactly the staged inputs.
+
+## AFL replay contract (C/C++)
+
+Set `io.deckhouse.fuzz.engine=afl` on the image. Its silent `task fuzz:list`
+must print target basenames, one per line, such as `nginx_conf_parse`. Names
+start with a letter or underscore and otherwise contain letters, digits,
+underscores, dots, plus signs or hyphens. Duplicate lines are deduplicated;
+empty or malformed discovery fails the job.
+
+Shared replay calls **one `task fuzz:replay` per target**, with `FUZZ_TARGET`,
+`FUZZ_PKG=afl`, `FUZZ_INPUT_DIR`, `FUZZ_CORPUS_DIR` and `FUZZ_ARTIFACT_DIR`.
+Both input-directory variables point to the same flat corpus. The task owns
+the target's exact argv, sanitizer configuration and execution timeout. It
+must run batch `afl-showmap -Z -i "$FUZZ_INPUT_DIR" -o "$FUZZ_ARTIFACT_DIR/maps"`
+with one reusable forkserver, leave those maps in the artifact directory, and
+fail if any input has a missing/empty map or showmap itself fails.
+
+`-Z` uses AFL++'s cmin map format: crashes and timeouts leave empty map files
+when `AFL_CMIN_ALLOW_ANY` and `AFL_CMIN_CRASHES_ONLY` are **unset**. The shared
+job checks every expected map as well, because showmap's final exit status
+can describe only the last input. A cumulative `-C` map alone is insufficient.
+The behavior was verified against the AFL++ v5.03c source and executed with
+v5.03a; preserve these semantics when updating the image's AFL++ version.
+
+For an instrumented binary that takes an input filename, the image task can use:
+
+```yaml
+version: '3'
+silent: true
+tasks:
+  fuzz:replay:
+    cmds:
+      - |
+        set -eu
+        subject="/out/fuzz/bin/${FUZZ_TARGET:?}"
+        input_dir="${FUZZ_INPUT_DIR:?}"
+        maps="${FUZZ_ARTIFACT_DIR:?}/maps"
+        test -x "$subject"
+        mkdir -p "$maps"  # Must be empty at the start of this replay.
+        unset AFL_CMIN_ALLOW_ANY AFL_CMIN_CRASHES_ONLY
+        status=0
+        afl-showmap -q -Z -m none -t 30000 -i "$input_dir" -o "$maps" \
+          -- "$subject" @@ || status=$?
+        count=0
+        for seed in "$input_dir"/*; do
+          test -f "$seed" || continue
+          count=$((count + 1))
+          test -s "$maps/${seed##*/}" || status=1
+        done
+        test "$count" -gt 0 && test "$status" -eq 0
+```
+
+The example uses 30 seconds per input. Keep package-specific flags in the
+image Taskfile; a stdin target needs its own argv instead of `@@`. Sanitizer
+errors must terminate the target as a crash (for example, ASan/UBSan
+`abort_on_error=1`). A normal nonzero target exit is not necessarily an AFL
+crash; use the image's AFL crash-exit configuration if required by the harness.
+The image must reject inputs larger than its supported size rather than let
+showmap silently truncate them.
+
+No corpus inputs is an error. AFL++ v5.03 skips zero-byte inputs in batch
+mode; the resulting missing map fails shared replay as incomplete. Such an
+input is retained for investigation instead of silently counted as passing.
+A missing/empty map identifies an unsuccessful input, but does not distinguish
+crash from timeout or missing instrumentation. All other targets still run;
+failed targets retain the merged corpus, maps, logs, failed-input list and
+reproduction command for seven days. This replays existing inputs only and
+does not start `afl-fuzz` or a mutation campaign.
