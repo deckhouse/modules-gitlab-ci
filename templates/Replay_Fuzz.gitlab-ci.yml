@@ -136,6 +136,16 @@
           fi
         else
           unset AFL_CMIN_ALLOW_ANY AFL_CMIN_CRASHES_ONLY
+          # Set these inside Docker: GitLab variables are not inherited by it.
+          # -Z enables quiet mode itself; AFL_DEBUG_CHILD preserves target stderr.
+          export AFL_DEBUG_CHILD=1 AFL_PRINT_FILENAMES=1 AFL_DEBUG=1
+          {
+            printf 'Engine: afl\nTool: '
+            command -v afl-showmap || true
+            # Help exits nonzero; consume all output but retain only the banner.
+            (afl-showmap -h 2>&1 || true) | sed -n '1p'
+            printf 'Diagnostics: AFL_DEBUG_CHILD=1 AFL_PRINT_FILENAMES=1 AFL_DEBUG=1\n'
+          } | tee "$report/afl-tool.log"
           # AFL exposes executable basenames, one per line, without task chatter.
           if ! awk '
             NF == 0 { next }
@@ -189,8 +199,21 @@
           for seed in "$target_corpus"/*; do
             if [[ -f "$seed" ]]; then inputs+=("${seed##*/}"); fi
           done
+          : > "$output/replay.log"
+          if [[ "$FUZZ_ENGINE" == afl ]]; then
+            empty_inputs=0
+            for input in "${inputs[@]}"; do
+              if [[ ! -s "$target_corpus/$input" ]]; then empty_inputs=$((empty_inputs + 1)); fi
+            done
+            {
+              cat "$report/afl-tool.log"
+              printf 'Target: %s; inputs: %s; empty inputs: %s\n' "$target" "${#inputs[@]}" "$empty_inputs"
+              printf 'Command: FUZZ_PKG=%q FUZZ_TARGET=%q FUZZ_INPUT_DIR=%q FUZZ_CORPUS_DIR=%q FUZZ_ARTIFACT_DIR=%q task fuzz:replay\n' \
+                "$package" "$target" "$target_corpus" "$target_corpus" "$output/artifacts"
+            } | tee -a "$output/replay.log"
+          fi
           if [[ "$FUZZ_ENGINE" == afl && "${#inputs[@]}" -eq 0 ]]; then
-            echo 'No AFL corpus inputs found in the image or S3' | tee "$output/replay.log"
+            echo 'No AFL corpus inputs found in the image or S3' | tee -a "$output/replay.log"
             replay_status=1
           else
             # One task per target/corpus. The image owns argv, services and limits;
@@ -198,25 +221,49 @@
             if FUZZ_PKG="$package" FUZZ_TARGET="$target" \
               FUZZ_INPUT_DIR="$target_corpus" FUZZ_CORPUS_DIR="$target_corpus" \
               FUZZ_ARTIFACT_DIR="$output/artifacts" \
-              task fuzz:replay </dev/null 2>&1 | tee "$output/replay.log"; then
+              task fuzz:replay </dev/null 2>&1 | tee -a "$output/replay.log"; then
               :
             else
               replay_status=$?
             fi
             if [[ "$FUZZ_ENGINE" == afl ]]; then
+              printf 'Replay task/pipeline exit code: %s (before map validation)\n' "$replay_status" | tee -a "$output/replay.log"
+              maps_present=0
+              maps_empty=0
+              maps_missing=0
+              printf 'input\tmap_state\n' > "$output/maps.tsv"
               for input in "${inputs[@]}"; do
                 map="$output/artifacts/maps/$input"
-                if [[ ! -f "$map" || ! -s "$map" ]]; then
+                if [[ ! -f "$map" ]]; then
+                  map_state=missing
+                  maps_missing=$((maps_missing + 1))
+                elif [[ ! -s "$map" ]]; then
+                  map_state=empty
+                  maps_empty=$((maps_empty + 1))
+                else
+                  map_state=present
+                  maps_present=$((maps_present + 1))
+                fi
+                printf '%s\t%s\n' "$input" "$map_state" >> "$output/maps.tsv"
+                if [[ "$map_state" != present ]]; then
                   printf '%s\n' "$input" >> "$output/failed-inputs.txt"
-                  printf 'FAILED input %s: missing/empty AFL map (crash, timeout or incomplete replay)\n' \
-                    "$input" | tee -a "$output/replay.log"
+                  printf 'FAILED input %s: map=%s; cause is not determined by the map alone (see child/showmap diagnostics)\n' \
+                    "$input" "$map_state" | tee -a "$output/replay.log"
                   replay_status=1
                 fi
               done
+              printf 'AFL maps: expected=%s present=%s empty=%s missing=%s; replay exit=%s\n' \
+                "${#inputs[@]}" "$maps_present" "$maps_empty" "$maps_missing" "$replay_status" | tee -a "$output/replay.log"
             fi
           fi
           if [[ "$replay_status" -eq 0 ]]; then
-            rm -rf "$output" "$target_corpus"
+            if [[ "$FUZZ_ENGINE" == afl ]]; then
+              # Retain diagnostics on success too, without retaining all maps.
+              rm -rf "$output/artifacts/maps" "$target_corpus"
+              printf '\nPASSED: afl / %s\nLog: fuzz-replay/%s/replay.log\n' "$target" "$report_name" >> "$summary"
+            else
+              rm -rf "$output" "$target_corpus"
+            fi
             continue
           fi
           failed=$((failed + 1))

@@ -218,6 +218,22 @@ can describe only the last input. A cumulative `-C` map alone is insufficient.
 The behavior was verified against the AFL++ v5.03c source and executed with
 v5.03a; preserve these semantics when updating the image's AFL++ version.
 
+Shared AFL replay enables `AFL_DEBUG_CHILD=1`, `AFL_PRINT_FILENAMES=1` and
+`AFL_DEBUG=1` **inside the container**, so child stdout/stderr, sanitizer reports,
+input filenames and AFL startup/crash diagnostics reach the job log. Removing
+`-q` alone is insufficient: `-Z` enables quiet mode itself. Replay does not dump
+the environment or read corpus contents into the log; image tasks should avoid
+logging credentials or input data in their own diagnostics.
+
+`afl-tool.log` records the tool path/version. Each target's `replay.log` records
+the engine, task command, input count, task/pipeline exit code and map totals;
+`maps.tsv` records `present`, `empty` or `missing` for each input. These logs are
+retained on success as well as failure. Image adapters should also log their
+actual showmap command, timeout and numeric exit status, and preserve child
+output. Batch showmap's status describes the last input, not the entire corpus;
+exit 1 may also be a tool/startup error, so consult the diagnostics. Missing or
+empty maps alone must not be reported as confirmed crashes or timeouts.
+
 For an instrumented binary that takes an input filename, the image task can use:
 
 ```yaml
