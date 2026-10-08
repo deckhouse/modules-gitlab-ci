@@ -5,7 +5,7 @@ include:
     ref: v19.0
     file: /templates/Setup.gitlab-ci.yml
   - project: deckhouse/3p/deckhouse/modules-gitlab-ci
-    ref: &fuzz_templates_ref fuzz-build-replay-templates
+    ref: &fuzz_templates_ref fuzz-replay-engines
     file: /templates/Build_Fuzz.gitlab-ci.yml
 
 variables:
