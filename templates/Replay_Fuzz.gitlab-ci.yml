@@ -51,14 +51,25 @@
       component=$(jq -r --arg image "$FUZZ_IMAGE" '
         .Images[$image] | (.GitHubPath // .GithubPath // .GitPath // .Context // .Path // "") |
         if . == "" then $image else . end' images_fuzz_tags_werf.json)
-      echo "Replay $FUZZ_IMAGE"
+      # Resolve each matrix image independently, as the fuzzing dispatcher does.
+      docker pull --platform linux/amd64 "$image"
+      engine=$(docker image inspect "$image" | jq -er '
+        .[0].Config | (.Labels["io.deckhouse.fuzz.engine"] // "") as $label |
+        if $label != "" then $label else
+          ([.Env[]? | select(startswith("FUZZ_ENGINE=")) | sub("^FUZZ_ENGINE="; "")] |
+            last // "go") end')
+      case "$engine" in
+        go|ruzzy|afl) ;;
+        *) echo "Unsupported fuzz engine for $FUZZ_IMAGE: $engine" >&2; exit 1 ;;
+      esac
+      echo "Replay $FUZZ_IMAGE (engine=$engine)"
       # Keep the stopped container until failure reports have been copied out.
       status=0
       docker run --init -i --name "$container" --platform linux/amd64 \
         -e AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
         -e FUZZ_S3_ENDPOINT -e FUZZ_S3_ACCESS_KEY -e FUZZ_S3_SECRET_KEY \
         -e FUZZ_S3_REPOSITORY -e FUZZ_S3_BRANCH_SLUG \
-        -e FUZZ_REPLAY_INPUT_TIMEOUT \
+        -e FUZZ_REPLAY_INPUT_TIMEOUT -e FUZZ_ENGINE="$engine" \
         -e FUZZ_S3_COMPONENT="$component" \
         -e FUZZ_REPLAY_IMAGE="$image" -e CI_COMMIT_SHA -e CI_JOB_URL \
         --entrypoint bash "$image" -euo pipefail -s <<'REPLAY' || status=$?
@@ -67,9 +78,10 @@
       summary="$report/summary.txt"
       printf '=== FUZZ REPLAY SUMMARY ===\nImage: %s\nCommit: %s\nWorkdir: %s\n' \
         "$FUZZ_REPLAY_IMAGE" "$CI_COMMIT_SHA" "$PWD" > "$summary"
-      case "${FUZZ_ENGINE:-go}" in
-      ruzzy)
-        ruby --version >> "$summary"
+      printf 'Engine: %s\n' "$FUZZ_ENGINE" >> "$summary"
+      case "$FUZZ_ENGINE" in
+      ruzzy|afl)
+        if [[ "$FUZZ_ENGINE" == ruzzy ]]; then ruby --version >> "$summary"; fi
         printf 'Artifacts: %s/artifacts/browse/fuzz-replay/\n' "$CI_JOB_URL" >> "$summary"
         unset AWS_SESSION_TOKEN AWS_SECURITY_TOKEN AWS_PROFILE
         export AWS_ACCESS_KEY_ID="$FUZZ_S3_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$FUZZ_S3_SECRET_KEY"
@@ -83,7 +95,7 @@
         component=${component%/fuzz}
         source="s3://anomaloys-materials/${FUZZ_S3_REPOSITORY}/${FUZZ_S3_BRANCH_SLUG}/${component}/"
         corpus=$(mktemp -d)
-        echo "Downloading S3 corpus: $source (Ruzzy)"
+        echo "Downloading S3 corpus: $source ($FUZZ_ENGINE)"
         while true; do
           if aws --endpoint-url "$FUZZ_S3_ENDPOINT" s3 sync \
             "$source" "$corpus/" --exclude '*' \
@@ -101,48 +113,163 @@
         done
         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY FUZZ_S3_ACCESS_KEY FUZZ_S3_SECRET_KEY
         echo "Downloaded corpus files: $(find "$corpus" -type f | wc -l)"
-        if ! task fuzz:list </dev/null > "$report/targets.jsonl" 2> "$report/discovery.log"; then
+        if ! task fuzz:list </dev/null > "$report/targets.txt" 2> "$report/discovery.log"; then
           cat "$report/discovery.log" >&2
-          echo 'Ruzzy target discovery failed' | tee -a "$summary" >&2
+          echo "$FUZZ_ENGINE target discovery failed" | tee -a "$summary" >&2
           exit 1
         fi
-        # Unlike Go's native listing, Ruzzy exposes package/target JSON objects.
-        # Target names must be unique because they form the platform's S3 keys.
-        if ! jq -ser '
-          if length == 0 then error("No Ruzzy fuzz targets found")
-          elif any(.[]; (.package | type) != "string" or (.target | type) != "string")
-            then error("fuzz:list must emit package/target JSON objects")
-          elif any(.[]; (.package | test("\\A[^\\x00\\t\\r\\n]+\\z") | not) or
-                        (.target | test("\\A[A-Za-z0-9_]+\\z") | not))
-            then error("Invalid Ruzzy package or target name")
-          elif (map(.target) | unique | length) != length
-            then error("Duplicate Ruzzy target names have ambiguous S3 keys")
-          else sort_by(.package, .target)[] | [.package, .target] | join("\t") end
-        ' "$report/targets.jsonl" > "$report/targets.tsv" 2>> "$report/discovery.log"; then
-          cat "$report/discovery.log" | tee -a "$summary" >&2
-          exit 1
+        if [[ "$FUZZ_ENGINE" == ruzzy ]]; then
+          # Ruzzy exposes JSONL; names identify the platform's S3 keys.
+          if ! jq -ser '
+            if length == 0 then error("No Ruzzy fuzz targets found")
+            elif any(.[]; (.package | type) != "string" or (.target | type) != "string")
+              then error("fuzz:list must emit package/target JSON objects")
+            elif any(.[]; (.package | test("\\A[^\\x00\\t\\r\\n]+\\z") | not) or
+                          (.target | test("\\A[A-Za-z0-9_]+\\z") | not))
+              then error("Invalid Ruzzy package or target name")
+            elif (map(.target) | unique | length) != length
+              then error("Duplicate Ruzzy target names have ambiguous S3 keys")
+            else sort_by(.package, .target)[] | [.package, .target] | join("\t") end
+          ' "$report/targets.txt" > "$report/targets.tsv" 2>> "$report/discovery.log"; then
+            cat "$report/discovery.log" | tee -a "$summary" >&2
+            exit 1
+          fi
+        else
+          unset AFL_CMIN_ALLOW_ANY AFL_CMIN_CRASHES_ONLY
+          # Set these inside Docker: GitLab variables are not inherited by it.
+          # -Z enables quiet mode itself; AFL_DEBUG_CHILD preserves target stderr.
+          export AFL_DEBUG_CHILD=1 AFL_PRINT_FILENAMES=1 AFL_DEBUG=1
+          {
+            printf 'Engine: afl\nTool: '
+            command -v afl-showmap || true
+            # Help exits nonzero; consume all output but retain only the banner.
+            (afl-showmap -h 2>&1 || true) | sed -n '1p'
+            printf 'Diagnostics: AFL_DEBUG_CHILD=1 AFL_PRINT_FILENAMES=1 AFL_DEBUG=1\n'
+          } | tee "$report/afl-tool.log"
+          # AFL exposes executable basenames, one per line, without task chatter.
+          if ! awk '
+            NF == 0 { next }
+            !/^[A-Za-z_][A-Za-z0-9_.+-]*$/ { exit 1 }
+            !seen[$0]++ { print "afl\t" $0; count++ }
+            END { if (!count) exit 1 }
+          ' "$report/targets.txt" > "$report/targets.tsv"; then
+            echo 'Invalid or empty AFL fuzz:list output' | tee -a "$summary" >&2
+            exit 1
+          fi
         fi
+        # Merge image seeds and both S3 corpora. Content hashes avoid basename
+        # collisions and give showmap one flat, unambiguous input/map namespace.
+        stage_corpus() {
+          local package=$1 target=$2 destination=$3 manifest=$4 base seed digest variable
+          local -a roots=("$corpus/$target/corpus/minimized" "$corpus/$target/corpus/recovery")
+          if [[ -n "${FUZZ_SEEDS:-}" ]]; then roots+=("$FUZZ_SEEDS/$target"); fi
+          for variable in FUZZ_SEED_DIR SEED_CORPUS_DIR INPUT_CORPUS_DIR FUZZ_CORPUS; do
+            base=${!variable:-}
+            [[ -n "$base" ]] || continue
+            base=${base//\{target\}/$target}
+            base=${base//\{package\}/$package}
+            roots+=("$base")
+          done
+          roots+=("$PWD/testdata/fuzz/$target" "$PWD/corpus/$target" "$PWD/seeds/$target"
+            "$PWD/testdata/$target" "$PWD/fuzz/seeds/$target" "$PWD/fuzz/corpus/$target")
+          mkdir -p "$destination"
+          : > "$manifest"
+          for base in "${roots[@]}"; do
+            [[ -d "$base" ]] || continue
+            while IFS= read -r -d '' seed; do
+              digest=$(sha256sum < "$seed")
+              digest=${digest%% *}
+              if [[ ! -e "$destination/$digest" ]]; then cp -- "$seed" "$destination/$digest"; fi
+              printf '%s\t%q\n' "$digest" "$seed" >> "$manifest"
+            done < <(find "$base" -type d -name .state -prune -o -type f ! -name README.txt -print0)
+          done
+        }
         failed=0
         number=0
         while IFS=$'\t' read -r package target; do
           number=$((number + 1))
           report_name="$number-$target"
           output="$report/$report_name"
-          target_corpus="$corpus/$target/corpus"
-          mkdir -p "$output/artifacts" "$target_corpus"
-          echo "Replay Ruzzy target: package=$package target=$target"
-          # The image's task owns local seeds, application services and Ruzzy.
-          if FUZZ_PKG="$package" FUZZ_TARGET="$target" \
-            FUZZ_CORPUS_DIR="$target_corpus" FUZZ_ARTIFACT_DIR="$output/artifacts" \
-            task fuzz:replay </dev/null 2>&1 | tee "$output/replay.log"; then
-            rm -rf "$output"
-            continue
+          target_corpus="$report/corpus-$report_name"
+          mkdir -p "$output/artifacts"
+          stage_corpus "$package" "$target" "$target_corpus" "$output/corpus-sources.tsv"
+          echo "Replay $FUZZ_ENGINE target: package=$package target=$target"
+          replay_status=0
+          inputs=()
+          for seed in "$target_corpus"/*; do
+            if [[ -f "$seed" ]]; then inputs+=("${seed##*/}"); fi
+          done
+          : > "$output/replay.log"
+          if [[ "$FUZZ_ENGINE" == afl ]]; then
+            empty_inputs=0
+            for input in "${inputs[@]}"; do
+              if [[ ! -s "$target_corpus/$input" ]]; then empty_inputs=$((empty_inputs + 1)); fi
+            done
+            {
+              cat "$report/afl-tool.log"
+              printf 'Target: %s; inputs: %s; empty inputs: %s\n' "$target" "${#inputs[@]}" "$empty_inputs"
+              printf 'Command: FUZZ_PKG=%q FUZZ_TARGET=%q FUZZ_INPUT_DIR=%q FUZZ_CORPUS_DIR=%q FUZZ_ARTIFACT_DIR=%q task fuzz:replay\n' \
+                "$package" "$target" "$target_corpus" "$target_corpus" "$output/artifacts"
+            } | tee -a "$output/replay.log"
+          fi
+          if [[ "$FUZZ_ENGINE" == afl && "${#inputs[@]}" -eq 0 ]]; then
+            echo 'No AFL corpus inputs found in the image or S3' | tee -a "$output/replay.log"
+            replay_status=1
           else
-            replay_status=$?
+            # One task per target/corpus. The image owns argv, services and limits;
+            # AFL tasks use batch showmap -Z and retain per-input maps below.
+            if FUZZ_PKG="$package" FUZZ_TARGET="$target" \
+              FUZZ_INPUT_DIR="$target_corpus" FUZZ_CORPUS_DIR="$target_corpus" \
+              FUZZ_ARTIFACT_DIR="$output/artifacts" \
+              task fuzz:replay </dev/null 2>&1 | tee -a "$output/replay.log"; then
+              :
+            else
+              replay_status=$?
+            fi
+            if [[ "$FUZZ_ENGINE" == afl ]]; then
+              printf 'Replay task/pipeline exit code: %s (before map validation)\n' "$replay_status" | tee -a "$output/replay.log"
+              maps_present=0
+              maps_empty=0
+              maps_missing=0
+              printf 'input\tmap_state\n' > "$output/maps.tsv"
+              for input in "${inputs[@]}"; do
+                map="$output/artifacts/maps/$input"
+                if [[ ! -f "$map" ]]; then
+                  map_state=missing
+                  maps_missing=$((maps_missing + 1))
+                elif [[ ! -s "$map" ]]; then
+                  map_state=empty
+                  maps_empty=$((maps_empty + 1))
+                else
+                  map_state=present
+                  maps_present=$((maps_present + 1))
+                fi
+                printf '%s\t%s\n' "$input" "$map_state" >> "$output/maps.tsv"
+                if [[ "$map_state" != present ]]; then
+                  printf '%s\n' "$input" >> "$output/failed-inputs.txt"
+                  printf 'FAILED input %s: map=%s; cause is not determined by the map alone (see child/showmap diagnostics)\n' \
+                    "$input" "$map_state" | tee -a "$output/replay.log"
+                  replay_status=1
+                fi
+              done
+              printf 'AFL maps: expected=%s present=%s empty=%s missing=%s; replay exit=%s\n' \
+                "${#inputs[@]}" "$maps_present" "$maps_empty" "$maps_missing" "$replay_status" | tee -a "$output/replay.log"
+            fi
+          fi
+          if [[ "$replay_status" -eq 0 ]]; then
+            if [[ "$FUZZ_ENGINE" == afl ]]; then
+              # Retain diagnostics on success too, without retaining all maps.
+              rm -rf "$output/artifacts/maps" "$target_corpus"
+              printf '\nPASSED: afl / %s\nLog: fuzz-replay/%s/replay.log\n' "$target" "$report_name" >> "$summary"
+            else
+              rm -rf "$output" "$target_corpus"
+            fi
+            continue
           fi
           failed=$((failed + 1))
           mkdir -p "$output/corpus"
           cp -R "$target_corpus/." "$output/corpus/"
+          rm -rf "$target_corpus"
           {
             printf '\nFAILED: %s / %s (exit %s)\nS3: %s%s/corpus/\nLog: fuzz-replay/%s/replay.log\n' \
               "$package" "$target" "$replay_status" "$source" "$target" "$report_name"
@@ -150,8 +277,9 @@
             echo 'Reproduce after downloading and unpacking this job artifacts; run from their root directory:'
             printf 'docker run --rm --platform linux/amd64 \\\n  -v "$PWD"/%q:/tmp/fuzz-replay-corpus:ro --workdir %q \\\n' \
               "fuzz-replay/$report_name/corpus" "$PWD"
-            printf '  -e FUZZ_PKG=%q -e FUZZ_TARGET=%q -e FUZZ_CORPUS_DIR=/tmp/fuzz-replay-corpus \\\n' \
+            printf '  -e FUZZ_PKG=%q -e FUZZ_TARGET=%q -e FUZZ_CORPUS_DIR=/tmp/fuzz-replay-corpus -e FUZZ_INPUT_DIR=/tmp/fuzz-replay-corpus \\\n' \
               "$package" "$target"
+            printf '  -e FUZZ_ARTIFACT_DIR=/tmp/fuzz-replay-artifacts \\\n'
             printf '  --entrypoint task %q fuzz:replay\n' "$FUZZ_REPLAY_IMAGE"
           } >> "$summary"
         done < "$report/targets.tsv"
