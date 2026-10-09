@@ -6,6 +6,8 @@
 
 .promote_base:
   stage: deploy
+  tags: 
+    - deckhouse-build-prod
   script:
   - |
     function regctl_copy() {
