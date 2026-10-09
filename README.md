@@ -126,3 +126,71 @@ Template **Translate_Changelog.gitlab-ci.yml** implements the same flow as [modu
 **Optional variables:** `TRANSLATE_CHANGELOG_PATH` (default: `CHANGELOG`), `TRANSLATE_BASE_BRANCH` (default: `main`). Optional `RELEASE_TOKEN` for push/MR; otherwise `CI_JOB_TOKEN` is used.
 
 Example: see [`examples/translate-changelog.gitlab-ci.yml`](examples/translate-changelog.gitlab-ci.yml).
+
+## Delta CVE Scan (cve-gate)
+
+Template **Changed_Images.gitlab-ci.yml** computes `only_images.json` — a JSON array of changed
+image compact keys — by comparing the werf build report against `/images_digests.json` from the
+module's base image. Template **CVE_Scan.gitlab-ci.yml** includes it automatically, so CVE scans
+can run in delta mode on merge requests: only changed images are scanned instead of everything.
+
+### Requirements
+
+- Module image must contain `/images_digests.json` in its root.
+- Build job must produce `images_tags_werf.json` artifact (standard werf build).
+- Module must have access to the `modules-gitlab-ci` repo via `CI_JOB_TOKEN`.
+- cve-scripts repo cloned at **v4.2+** branch (CVE_Scan template already uses `main`).
+
+### Delta mode vs full scan
+
+| Scenario | `changed_images` job | CVE scan |
+|----------|---------------------|----------|
+| MR with image changes | Produces non-empty `only_images.json` | Scans only changed images |
+| MR without image changes | Produces empty `[]` | Skipped (CHANGED_COUNT=0) |
+| Module has no `/images_digests.json` | Fails (`allow_failure: true`) | Full scan (fallback) |
+
+### Usage
+
+Include only `CVE_Scan.gitlab-ci.yml` — **Changed_Images** is included automatically. Then add
+`needs: [changed_images, Build]` to your CVE scan job and set `CS_ONLY_IMAGES_ENABLED: "true"`:
+
+```yaml
+include:
+  - remote: '.../templates/CVE_Scan.gitlab-ci.yml'
+
+cve_scan:
+  extends: .cve_scan
+  variables:
+    CS_CASE: "External Modules"
+    CS_EXTERNAL_MODULE_NAME: my-module
+    CS_ONLY_IMAGES_ENABLED: "true"
+  needs: ["Build", "changed_images"]
+```
+
+The `changed_images` job is optional (`allow_failure: true`) — modules without
+`/images_digests.json` get a full scan as fallback.
+
+### Standalone use (custom jobs)
+
+For custom jobs that need the changed image list, include the template directly
+and consume `only_images.json` artifact:
+
+```yaml
+include:
+  - remote: '.../templates/Changed_Images.gitlab-ci.yml'
+
+my_custom_job:
+  needs: ["Build", "changed_images"]
+  script:
+    - echo "Changed images: $(cat only_images.json)"
+```
+
+### Key variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MODULES_GITLAB_CI_REF` | `v21.0` | Pinned tag for script download (use tag, not `main`) |
+| `CS_ONLY_IMAGES_ENABLED` | `"False"` | Enable delta scan in CVE_Scan |
+| `CS_ONLY_IMAGES` | `""` | JSON array of compact keys (filled from artifact) |
+
+See example: [`examples/simple-module-with-delta.gitlab-ci.yml`](examples/simple-module-with-delta.gitlab-ci.yml).

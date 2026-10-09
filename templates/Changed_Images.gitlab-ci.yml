@@ -1,0 +1,75 @@
+# Compute changed module images (only_images.json) from werf build report.
+#
+# Hidden base job to be extended by consuming projects.
+# Produces artifacts: only_images.json + changed.env (CHANGED_COUNT).
+#
+# Requirements:
+#   - Module image must contain /images_digests.json
+#   - Build job must produce images_tags_werf.json artifact
+#   - Registry access (regctl) for pulling base image
+#
+# Variables:
+#   MODULES_GITLAB_CI_REF — tag/branch of modules-gitlab-ci for script download (default: v21.0)
+#   DEV_REGISTRY, DEV_REGISTRY_USER, DEV_REGISTRY_PASSWORD — for regctl
+#   MODULES_MODULE_NAME — module name for registry path
+#
+# Usage standalone:
+#   include:
+#     - remote: '.../Changed_Images.gitlab-ci.yml'
+#   changed_images:
+#     extends: .changed_images_base
+#     needs: ["Build"]
+#     rules:
+#       - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+#
+# Usage with CVE_Scan (auto): CVE_Scan includes this file, just add `needs: [changed_images, Build]`.
+
+.changed_images_base:
+  stage: cve_scan
+  needs:
+    - job: Build
+      artifacts: true
+  variables:
+    MODULES_GITLAB_CI_REF: "v21.0"
+    BUILD_REPORT_PATH: "./images_tags_werf.json"
+    OUTPUT_CHANGED: "./changed_images.json"
+  before_script:
+    # Download changed_images.py from this repo via GitLab API
+    - |
+      curl -sSf --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+        "${CI_API_V4_URL}/projects/deckhouse%2F3p%2Fdeckhouse%2Fmodules-gitlab-ci/repository/files/scripts%2Fchanged_images.py/raw?ref=${MODULES_GITLAB_CI_REF}" \
+        -o changed_images.py
+    # Pull images_digests.json from base module image
+    - |
+      BASE_TAG="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-main}"
+      MODULE_IMAGE="${DEV_REGISTRY}/sys/deckhouse-oss/modules/${MODULES_MODULE_NAME}:${BASE_TAG}"
+      echo "Pulling images_digests.json from ${MODULE_IMAGE}"
+      regctl image get-file "${MODULE_IMAGE}" /images_digests.json > images_digests.json
+    # Bridge GITHUB_BASE_REF for PR commit detection
+    - |
+      if [[ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" ]]; then
+        export GITHUB_BASE_REF="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
+      fi
+  script:
+    - |
+      python3 changed_images.py
+      CHANGED_COUNT=$(jq 'length' changed_images.json)
+      jq -c '[.[].compact_keys[]?] | unique' changed_images.json > only_images.json
+      echo "CHANGED_COUNT=${CHANGED_COUNT}" > changed.env
+      echo "Changed final images: ${CHANGED_COUNT}"
+      echo "Changed compact keys: $(cat only_images.json)"
+    - rm -f changed_images.py images_digests.json changed_images.json
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - only_images.json
+    reports:
+      dotenv: changed.env
+
+# Concrete job — optional (allow_failure), fires only on MR.
+changed_images:
+  extends: .changed_images_base
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
