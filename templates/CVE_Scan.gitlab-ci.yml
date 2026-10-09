@@ -1,3 +1,10 @@
+# Auto-include changed_images template for delta scanning.
+# Modules that want delta CVE scan add `needs: [changed_images, Build]`
+# to their cve_scan job. Modules without images_digests.json get
+# changed_images failing with allow_failure → no impact.
+include:
+  - local: '/templates/Changed_Images.gitlab-ci.yml'
+
 .cve_scan:
   allow_failure: true
   variables:
