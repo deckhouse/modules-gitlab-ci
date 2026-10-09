@@ -1,36 +1,57 @@
 # Compute changed module images (only_images.json) from werf build report.
 #
-# Hidden base job to be extended by consuming projects.
+# Hidden base job — concrete jobs extend it and add needs + rules + secrets.
 # Produces artifacts: only_images.json + changed.env (CHANGED_COUNT).
 #
 # Requirements:
-#   - Module image must contain /images_digests.json
+#   - Registry image must contain images_digests.json (path configurable)
 #   - Build job must produce images_tags_werf.json artifact
-#   - Registry access (regctl) for pulling base image
+#   - Registry access (regctl, logged in before this job runs)
 #
-# Variables:
-#   MODULES_GITLAB_CI_REF — tag/branch of modules-gitlab-ci for script download (default: v21.0)
-#   DEV_REGISTRY, DEV_REGISTRY_USER, DEV_REGISTRY_PASSWORD — for regctl
-#   MODULES_MODULE_NAME — module name for registry path
+# Variables (set by concrete job in before_script — these come from Vault secrets
+# and are not available at YAML parse time):
+#   CHANGED_IMAGES_BASE_IMAGE     — full registry path to base image, e.g.
+#                                    ${DEV_REGISTRY}/sys/deckhouse-oss/modules/${MODULES_MODULE_NAME}
+#   CHANGED_IMAGES_SOURCE_TAG     — tag of the base image to pull digests from (default: target branch)
+#   CHANGED_IMAGES_DIGESTS_PATH   — path inside image to images_digests.json, e.g.
+#                                    /images_digests.json (external) or /deckhouse/modules/images_digests.json (deckhouse)
+#   MODULES_GITLAB_CI_REF         — tag/branch for script download (default: v21.0)
 #
-# Usage standalone:
+# Usage (external module):
 #   include:
 #     - remote: '.../Changed_Images.gitlab-ci.yml'
 #   changed_images:
 #     extends: .changed_images_base
 #     needs: ["Build"]
+#     before_script:
+#       # Vault secrets resolved at runtime — set in before_script, not variables:
+#       - export CHANGED_IMAGES_BASE_IMAGE="${DEV_REGISTRY}/sys/deckhouse-oss/modules/${MODULES_MODULE_NAME}"
+#       - export CHANGED_IMAGES_DIGESTS_PATH="/images_digests.json"
+#       - export MODULES_GITLAB_CI_REF="main"
 #     rules:
 #       - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 #
-# Usage with CVE_Scan (auto): CVE_Scan includes this file, just add `needs: [changed_images, Build]`.
+# Usage (deckhouse main repo):
+#   include:
+#     - project: "deckhouse/3p/deckhouse/modules-gitlab-ci"
+#       ref: "main"
+#       file: "/templates/Changed_Images.gitlab-ci.yml"
+#   changed_images:mr:
+#     extends: .changed_images_base
+#     needs: [build_fe:mr]
+#     before_script:
+#       - export CHANGED_IMAGES_BASE_IMAGE="${DECKHOUSE_DEV_REGISTRY_HOST}/sys/deckhouse-oss"
+#       - export CHANGED_IMAGES_DIGESTS_PATH="/deckhouse/modules/images_digests.json"
+#       - export MODULES_GITLAB_CI_REF="main"
 
 .changed_images_base:
   stage: cve_scan
-  needs:
-    - job: Build
-      artifacts: true
+  allow_failure: true
   variables:
     MODULES_GITLAB_CI_REF: "v21.0"
+    CHANGED_IMAGES_SOURCE_TAG: ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-main}
+    CHANGED_IMAGES_BASE_IMAGE: ""
+    CHANGED_IMAGES_DIGESTS_PATH: ""
     BUILD_REPORT_PATH: "./images_tags_werf.json"
     OUTPUT_CHANGED: "./changed_images.json"
   before_script:
@@ -39,13 +60,12 @@
       curl -sSf --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
         "${CI_API_V4_URL}/projects/deckhouse%2F3p%2Fdeckhouse%2Fmodules-gitlab-ci/repository/files/scripts%2Fchanged_images.py/raw?ref=${MODULES_GITLAB_CI_REF}" \
         -o changed_images.py
-    # Pull images_digests.json from base module image
+    # Pull images_digests.json from the base image at source tag
     - |
-      BASE_TAG="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-main}"
-      MODULE_IMAGE="${DEV_REGISTRY}/sys/deckhouse-oss/modules/${MODULES_MODULE_NAME}:${BASE_TAG}"
-      echo "Pulling images_digests.json from ${MODULE_IMAGE}"
-      regctl image get-file "${MODULE_IMAGE}" /images_digests.json > images_digests.json
-    # Bridge GITHUB_BASE_REF for PR commit detection
+      echo "Pulling images_digests.json from ${CHANGED_IMAGES_BASE_IMAGE}:${CHANGED_IMAGES_SOURCE_TAG}"
+      regctl image get-file "${CHANGED_IMAGES_BASE_IMAGE}:${CHANGED_IMAGES_SOURCE_TAG}" \
+        "${CHANGED_IMAGES_DIGESTS_PATH}" > images_digests.json
+    # Bridge: script reads GITHUB_BASE_REF to determine PR commits
     - |
       if [[ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" ]]; then
         export GITHUB_BASE_REF="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
@@ -67,9 +87,5 @@
     reports:
       dotenv: changed.env
 
-# Concrete job — optional (allow_failure), fires only on MR.
-changed_images:
-  extends: .changed_images_base
-  allow_failure: true
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+# No concrete job here — consuming projects extend .changed_images_base
+# and add their own rules + needs. See usage docs above.
