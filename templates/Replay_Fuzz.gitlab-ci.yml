@@ -99,8 +99,8 @@
         while true; do
           if aws --endpoint-url "$FUZZ_S3_ENDPOINT" s3 sync \
             "$source" "$corpus/" --exclude '*' \
-            --include '*/corpus/minimized/*' --include '*/corpus/recovery/*' \
-            --exclude '*/attempts/*' --exclude '*/report/*' \
+            --include '*/corpus/minimized/*' \
+            --exclude '*/corpus/recovery/*' --exclude '*/attempts/*' --exclude '*/report/*' \
             --only-show-errors 2> "$report/s3.log"; then
             break
           else
@@ -157,11 +157,11 @@
             exit 1
           fi
         fi
-        # Merge image seeds and both S3 corpora. Content hashes avoid basename
-        # collisions and give showmap one flat, unambiguous input/map namespace.
+        # Merge image seeds and the minimized S3 corpus. Content hashes prevent
+        # basename collisions and give showmap one flat input/map namespace.
         stage_corpus() {
           local package=$1 target=$2 destination=$3 manifest=$4 base seed digest variable
-          local -a roots=("$corpus/$target/corpus/minimized" "$corpus/$target/corpus/recovery")
+          local -a roots=("$corpus/$target/corpus/minimized")
           if [[ -n "${FUZZ_SEEDS:-}" ]]; then roots+=("$FUZZ_SEEDS/$target"); fi
           for variable in FUZZ_SEED_DIR SEED_CORPUS_DIR INPUT_CORPUS_DIR FUZZ_CORPUS; do
             base=${!variable:-}
@@ -310,9 +310,9 @@
       while true; do
         if aws --endpoint-url "$FUZZ_S3_ENDPOINT" s3 sync \
           "$source" "$corpus/" --exclude '*' \
-          --include '*/corpus/minimized/*' --include '*/corpus/recovery/*' \
+          --include '*/corpus/minimized/*' \
           --include "*/corpus/gocache-fuzz/${module}/*" \
-          --exclude '*/attempts/*' --exclude '*/report/*' \
+          --exclude '*/corpus/recovery/*' --exclude '*/attempts/*' --exclude '*/report/*' \
           --only-show-errors 2> /tmp/fuzz-s3.log; then
           break
         else
@@ -461,7 +461,7 @@
         seen_targets[$target]=1
         destination="$(go list -f '{{.Dir}}' "$package")/testdata/fuzz/$target"
         copied=0
-        for seeds in "$corpus/$s3_key/corpus/minimized" "$corpus/$s3_key/corpus/recovery" \
+        for seeds in "$corpus/$s3_key/corpus/minimized" \
           "$corpus/$s3_key/corpus/gocache-fuzz/$package/$target"; do
           [[ -d "$seeds" ]] || continue
           while IFS= read -r -d '' seed; do
