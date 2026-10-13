@@ -40,9 +40,11 @@ the include and `FUZZ_REPLAY_TEMPLATE_REF`; the YAML anchor keeps them in sync.
    The generated configuration includes `Replay_Fuzz.gitlab-ci.yml` from this
    repository at the selected ref; projects do not need a local replay template.
    Each image gets a separate replay job and downloads the parent build report.
-3. Replay downloads minimized and recovery corpus seeds from
+3. Replay downloads minimized corpus seeds from
    `s3://anomaloys-materials/<repository>/<branch>/<component>/` and discovers
-   targets with `task fuzz:list`. Each matrix job reads its image label
+   targets with `task fuzz:list`. Go replay also downloads matching module
+   seeds from `corpus/gocache-fuzz`; `corpus/recovery` is excluded for all engines.
+   Each matrix job reads its image label
    `io.deckhouse.fuzz.engine` (`go`, `ruzzy` or `afl`). For older images without
    the label, replay uses the image environment variable `FUZZ_ENGINE`, defaulting
    to Go when it is absent. Unsupported engines fail before replay. Ruby/Ruzzy
@@ -178,8 +180,8 @@ Ruzzy execution limits are owned by the image's `fuzz:replay` task;
 
 ## Shared AFL and Ruzzy corpus staging
 
-Replay combines S3 `<target>/corpus/minimized` and `recovery` with the image's
-built-in seeds. Image seed locations follow the fuzzing system contract:
+Replay combines S3 `<target>/corpus/minimized` with the image's built-in seeds.
+Image seed locations follow the fuzzing system contract:
 
 - `FUZZ_SEEDS/<target>` when `FUZZ_SEEDS` is set.
 - `FUZZ_SEED_DIR`, `SEED_CORPUS_DIR`, `INPUT_CORPUS_DIR` and `FUZZ_CORPUS`;
